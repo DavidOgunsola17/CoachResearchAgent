@@ -1,6 +1,6 @@
 # CoachResearchAgent
 
-**Recruiting Agent** is a streamlined tool that makes it easy for athletes to discover and contact college coaches.
+**Recruiting Agent** is a streamlined tool that makes it easy for athletes to discover and contact college coaches. At FND, we leverage AI to automate coach discovery and outreach in the college recruitment process.
 
 You enter a **school name** and **select your sport** — the agent automatically pulls the **top 10 coaching staff members**, including:
 
