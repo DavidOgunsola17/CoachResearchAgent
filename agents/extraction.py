@@ -120,13 +120,24 @@ HTML Content:
                 model_name=self.model_name,
                 generation_config={
                     "temperature": 0.1,  # Low temperature for accurate extraction
-                    "max_output_tokens": 2000,
-                    "response_mime_type": "application/json"  # Request JSON response
+                    "max_output_tokens": 2000
                 }
             )
             
-            response = model.generate_content(prompt)
+            # Request JSON explicitly in prompt (works across all versions)
+            json_prompt = prompt + "\n\nIMPORTANT: Return ONLY valid JSON. No markdown, no explanation, just the JSON object."
+            
+            response = model.generate_content(json_prompt)
             result = response.text.strip()
+            
+            # Remove markdown code blocks if present
+            if result.startswith("```json"):
+                result = result[7:]  # Remove ```json
+            if result.startswith("```"):
+                result = result[3:]  # Remove ```
+            if result.endswith("```"):
+                result = result[:-3]  # Remove closing ```
+            result = result.strip()
             
             # Parse JSON response
             try:

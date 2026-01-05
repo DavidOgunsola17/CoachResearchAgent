@@ -39,9 +39,46 @@ class WebScraper:
     
     async def __aenter__(self):
         """Async context manager entry."""
-        self.playwright = await async_playwright().start()
-        self.browser = await self.playwright.chromium.launch(headless=self.headless)
-        return self
+        try:
+            self.playwright = await async_playwright().start()
+            self.browser = await self.playwright.chromium.launch(headless=self.headless)
+            return self
+        except Exception as e:
+            error_msg = str(e)
+            if "missing dependencies" in error_msg.lower() or "install-deps" in error_msg.lower():
+                logger.error(
+                    "\n" + "=" * 60 + "\n"
+                    "PLAYWRIGHT SYSTEM DEPENDENCIES MISSING\n"
+                    "=" * 60 + "\n"
+                    "Please install dependencies using one of these methods:\n\n"
+                    "1. Run: playwright install-deps\n"
+                    "   (or: playwright install-deps chromium)\n\n"
+                    "2. If that doesn't work, install manually:\n"
+                    "   apt-get update && apt-get install -y libatk1.0-0 libatk-bridge2.0-0 "
+                    "libcups2 libdrm2 libxkbcommon0 libatspi2.0-0 libxcomposite1 "
+                    "libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2\n\n"
+                    "3. If using Codespaces/DevContainer, rebuild the container.\n"
+                    "   The .devcontainer/devcontainer.json will auto-install dependencies.\n"
+                    "=" * 60
+                )
+                raise RuntimeError(
+                    "Playwright system dependencies are missing. "
+                    "See error message above for installation instructions."
+                ) from e
+            elif "Executable doesn't exist" in error_msg:
+                logger.error(
+                    "\n" + "=" * 60 + "\n"
+                    "PLAYWRIGHT BROWSERS NOT INSTALLED\n"
+                    "=" * 60 + "\n"
+                    "Please install browsers by running:\n"
+                    "  playwright install chromium\n"
+                    "=" * 60
+                )
+                raise RuntimeError(
+                    "Playwright browsers are not installed. "
+                    "Run: playwright install chromium"
+                ) from e
+            raise
     
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """Async context manager exit."""

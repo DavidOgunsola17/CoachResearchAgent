@@ -93,28 +93,39 @@ class DiscoveryAgent:
         Returns:
             List of prioritized URLs
         """
-        prompt = f"""Search the web for the official athletics staff directory for {school_name} {sport}.
+        prompt = f"""Find the official athletics staff directory website for {school_name} {sport}.
 
-Find URLs that are:
-1. Official athletics websites (.edu domains or official athletics subdomains)
-2. Likely to contain coaching staff information (rosters, staff directories, coaching pages)
+Search for and return ONLY the most relevant official URLs that contain coaching staff information.
+
+Requirements:
+1. Must be official athletics websites (.edu domains or official athletics subdomains)
+2. Should contain coaching staff directories, rosters, or staff pages
 3. NOT social media, news articles, or third-party sites
 
-Focus on finding pages that list coaches, coaching staff, or athletic staff directories.
+Return ONLY a list of URLs, one per line, in order of relevance (most relevant first).
+Include only the URLs, nothing else.
 
-Return ONLY a list of URLs, one per line, prioritized from most relevant to least relevant.
-Include only the URLs, nothing else. Format example:
+Example format:
 https://example.edu/athletics/basketball/coaches
 https://athletics.example.edu/staff
 """
 
         try:
-            model = genai.GenerativeModel(
-                model_name=self.model_name,
-                tools=[{"google_search": {}}]  # Enable Google Search grounding
-            )
+            model = genai.GenerativeModel(model_name=self.model_name)
             
-            response = model.generate_content(prompt)
+            # Try to enable Google Search if available, otherwise rely on model knowledge
+            try:
+                # Attempt to use Google Search grounding if supported
+                from google.generativeai import protos
+                response = model.generate_content(
+                    prompt,
+                    tools=[protos.Tool(google_search_retrieval=protos.GoogleSearchRetrieval())]
+                )
+            except (AttributeError, TypeError, ValueError, ImportError):
+                # Fallback: use model without explicit tools (may still use web search if model supports it)
+                logger.debug("Google Search grounding not available, using model knowledge")
+                response = model.generate_content(prompt)
+            
             result_text = response.text.strip()
             
             # Parse URLs from response
