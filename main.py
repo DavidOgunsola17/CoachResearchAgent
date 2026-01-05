@@ -15,7 +15,6 @@ import logging
 import os
 import sys
 from dotenv import load_dotenv
-from openai import OpenAI
 
 from agents.discovery import DiscoveryAgent
 from agents.extraction import ExtractionAgent
@@ -70,21 +69,12 @@ Examples:
     
     # Load environment variables
     load_dotenv()
-    openai_api_key = os.getenv('OPENAI_API_KEY')
     gemini_api_key = os.getenv('GEMINI_API_KEY')
-    
-    if not openai_api_key:
-        logger.error("OPENAI_API_KEY not found in environment variables")
-        logger.error("Please create a .env file with: OPENAI_API_KEY=your_key_here")
-        sys.exit(1)
     
     if not gemini_api_key:
         logger.error("GEMINI_API_KEY not found in environment variables")
         logger.error("Please create a .env file with: GEMINI_API_KEY=your_key_here")
         sys.exit(1)
-    
-    # Initialize OpenAI client (for extraction agent)
-    openai_client = OpenAI(api_key=openai_api_key)
     
     # Initialize web scraper
     web_scraper = WebScraper(headless=args.headless)
@@ -109,7 +99,7 @@ Examples:
             logger.info("STEP 2: Extraction Agent")
             logger.info("=" * 60)
             
-            extraction_agent = ExtractionAgent(openai_client, web_scraper)
+            extraction_agent = ExtractionAgent(gemini_api_key, web_scraper)
             coaches = await extraction_agent.extract_from_multiple_urls(urls)
             
             if not coaches:

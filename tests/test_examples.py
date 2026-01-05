@@ -12,7 +12,6 @@ import logging
 import os
 import sys
 from dotenv import load_dotenv
-from openai import OpenAI
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -52,7 +51,7 @@ TEST_CASES = [
 ]
 
 
-async def test_case(school_name: str, sport: str, gemini_api_key: str, openai_client: OpenAI, web_scraper: WebScraper):
+async def test_case(school_name: str, sport: str, gemini_api_key: str, web_scraper: WebScraper):
     """
     Test a single case and log detailed results.
     
@@ -60,7 +59,6 @@ async def test_case(school_name: str, sport: str, gemini_api_key: str, openai_cl
         school_name: School name
         sport: Sport name
         gemini_api_key: Gemini API key
-        openai_client: OpenAI client
         web_scraper: WebScraper instance
     """
     logger.info("")
@@ -86,7 +84,7 @@ async def test_case(school_name: str, sport: str, gemini_api_key: str, openai_cl
         # Step 2: Extraction
         logger.info("")
         logger.info(">>> STEP 2: Extraction Agent")
-        extraction_agent = ExtractionAgent(openai_client, web_scraper)
+        extraction_agent = ExtractionAgent(gemini_api_key, web_scraper)
         coaches = await extraction_agent.extract_from_multiple_urls(urls)
         
         logger.info(f"Coaches Extracted: {len(coaches)}")
@@ -176,21 +174,12 @@ async def main():
     """Run all test cases."""
     # Load environment variables
     load_dotenv()
-    openai_api_key = os.getenv('OPENAI_API_KEY')
     gemini_api_key = os.getenv('GEMINI_API_KEY')
-    
-    if not openai_api_key:
-        logger.error("OPENAI_API_KEY not found in environment variables")
-        logger.error("Please create a .env file with: OPENAI_API_KEY=your_key_here")
-        sys.exit(1)
     
     if not gemini_api_key:
         logger.error("GEMINI_API_KEY not found in environment variables")
         logger.error("Please create a .env file with: GEMINI_API_KEY=your_key_here")
         sys.exit(1)
-    
-    # Initialize OpenAI client
-    openai_client = OpenAI(api_key=openai_api_key)
     
     # Initialize web scraper
     web_scraper = WebScraper(headless=True)
@@ -204,7 +193,6 @@ async def main():
                 test_case_data['school'],
                 test_case_data['sport'],
                 gemini_api_key,
-                openai_client,
                 web_scraper
             )
             logger.info("")

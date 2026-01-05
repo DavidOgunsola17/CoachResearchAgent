@@ -2,14 +2,14 @@
 Extraction Agent - Extracts raw coach data from HTML pages.
 
 This agent parses staff pages and extracts names, roles, and any listed contact info.
-It uses OpenAI to understand page structure and extract structured data, ensuring
+It uses Gemini to understand page structure and extract structured data, ensuring
 only explicit information is captured (no inference or guessing).
 """
 
 import json
 import logging
 from typing import List, Dict, Optional
-from openai import OpenAI
+import google.generativeai as genai
 
 from utils.web_scraper import WebScraper
 
@@ -22,21 +22,23 @@ class ExtractionAgent:
     
     Process:
     - Fetches HTML content using web scraper
-    - Uses OpenAI to extract structured coach information
+    - Uses Gemini to extract structured coach information
     - Only extracts explicitly visible data (no inference)
     - Filters out non-coaching staff
     - Limits to 10 coaches per page
     """
     
-    def __init__(self, openai_client: OpenAI, web_scraper: WebScraper):
+    def __init__(self, gemini_api_key: str, web_scraper: WebScraper, model_name: str = "gemini-2.0-flash-exp"):
         """
         Initialize the Extraction Agent.
         
         Args:
-            openai_client: OpenAI client instance
+            gemini_api_key: Google Gemini API key
             web_scraper: WebScraper instance for fetching pages
+            model_name: Gemini model name (default: gemini-2.0-flash-exp)
         """
-        self.openai_client = openai_client
+        genai.configure(api_key=gemini_api_key)
+        self.model_name = model_name
         self.web_scraper = web_scraper
     
     async def extract_from_url(self, url: str) -> List[Dict[str, str]]:
@@ -57,7 +59,7 @@ class ExtractionAgent:
             logger.warning(f"Extraction Agent: Failed to fetch HTML from {url}")
             return []
         
-        # Truncate HTML if too long (OpenAI token limits)
+        # Truncate HTML if too long (Gemini token limits)
         # Most pages should be fine, but some can be very large
         max_html_length = 150000  # Roughly 37k tokens (with some buffer)
         if len(html) > max_html_length:
@@ -65,16 +67,16 @@ class ExtractionAgent:
             # Try to keep the beginning (often contains main content)
             html = html[:max_html_length] + "... [truncated]"
         
-        # Extract using OpenAI
-        coaches = await self._extract_with_openai(html, url)
+        # Extract using Gemini
+        coaches = await self._extract_with_gemini(html, url)
         
         logger.info(f"Extraction Agent: Extracted {len(coaches)} coaches from {url}")
         
         return coaches
     
-    async def _extract_with_openai(self, html: str, source_url: str) -> List[Dict[str, str]]:
+    async def _extract_with_gemini(self, html: str, source_url: str) -> List[Dict[str, str]]:
         """
-        Use OpenAI to extract structured coach data from HTML.
+        Use Gemini to extract structured coach data from HTML.
         
         Args:
             html: HTML content
@@ -103,31 +105,28 @@ If email or Twitter is not visible, leave that field empty.
 
 Source URL: {source_url}
 
-HTML Content:
-{html[:100000]}"""  # Further truncate for the prompt
-
-        try:
-            response = self.openai_client.chat.completions.create(
-                model="gpt-4o",  # Using more capable model for accurate extraction
-                messages=[
-                    {
-                        "role": "system",
-                        "content": """You are a data extraction specialist. Extract ONLY information that is explicitly visible in the HTML.
-Never guess, infer, or create email addresses or Twitter handles.
 Return your results as a JSON object with a "coaches" key containing an array of objects.
 Each object must have these exact keys: name, position, email, twitter.
 If email or twitter is not found, use an empty string "".
 Limit to maximum 10 coaches.
-Format: {"coaches": [{"name": "...", "position": "...", "email": "...", "twitter": "..."}]}"""
-                    },
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.1,  # Low temperature for accurate extraction
-                max_tokens=2000,
-                response_format={"type": "json_object"}
+
+Format: {{"coaches": [{{"name": "...", "position": "...", "email": "...", "twitter": "..."}}]}}
+
+HTML Content:
+{html[:100000]}"""  # Further truncate for the prompt
+
+        try:
+            model = genai.GenerativeModel(
+                model_name=self.model_name,
+                generation_config={
+                    "temperature": 0.1,  # Low temperature for accurate extraction
+                    "max_output_tokens": 2000,
+                    "response_mime_type": "application/json"  # Request JSON response
+                }
             )
             
-            result = response.choices[0].message.content.strip()
+            response = model.generate_content(prompt)
+            result = response.text.strip()
             
             # Parse JSON response
             try:
@@ -174,10 +173,37 @@ Format: {"coaches": [{"name": "...", "position": "...", "email": "...", "twitter
             except json.JSONDecodeError as e:
                 logger.error(f"Extraction Agent: Failed to parse JSON response: {str(e)}")
                 logger.debug(f"Response content: {result}")
+                # Try to extract JSON from markdown code blocks if present
+                if "```json" in result:
+                    json_start = result.find("```json") + 7
+                    json_end = result.find("```", json_start)
+                    if json_end > json_start:
+                        try:
+                            parsed = json.loads(result[json_start:json_end].strip())
+                            if isinstance(parsed, dict) and 'coaches' in parsed:
+                                coaches = parsed['coaches']
+                                # Re-process with same validation logic
+                                validated_coaches = []
+                                for coach in coaches[:10]:
+                                    if isinstance(coach, dict):
+                                        validated = {
+                                            'name': str(coach.get('name', '')).strip(),
+                                            'position': str(coach.get('position', '')).strip(),
+                                            'email': str(coach.get('email', '')).strip(),
+                                            'twitter': str(coach.get('twitter', '')).strip(),
+                                            'source_url': source_url
+                                        }
+                                        if validated['name'] and validated['position']:
+                                            position_lower = validated['position'].lower()
+                                            if any(keyword in position_lower for keyword in ['coach', 'head', 'assistant', 'associate', 'director']):
+                                                validated_coaches.append(validated)
+                                return validated_coaches
+                        except json.JSONDecodeError:
+                            pass
                 return []
                 
         except Exception as e:
-            logger.error(f"Extraction Agent: Error using OpenAI: {str(e)}")
+            logger.error(f"Extraction Agent: Error using Gemini: {str(e)}")
             return []
     
     async def extract_from_multiple_urls(self, urls: List[str]) -> List[Dict[str, str]]:
@@ -207,4 +233,3 @@ Format: {"coaches": [{"name": "...", "position": "...", "email": "...", "twitter
                 continue
         
         return all_coaches[:10]  # Limit to 10 total
-
