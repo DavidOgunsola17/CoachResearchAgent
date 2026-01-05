@@ -1,4 +1,4 @@
-# CoachResearchAgent
+# FND: Coach Discovery and Outreach Agent
 
 **Recruiting Agent** is a streamlined tool that makes it easy for athletes to discover and contact college coaches. At FND, we leverage AI to automate coach discovery and outreach in the college recruitment process.
 
