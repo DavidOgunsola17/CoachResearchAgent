@@ -8,8 +8,10 @@ only explicit information is captured (no inference or guessing).
 
 import json
 import logging
+import sys
 from typing import List, Dict, Optional
 from openai import OpenAI
+from openai import AuthenticationError, RateLimitError, APIError
 
 from utils.web_scraper import WebScraper
 
@@ -209,9 +211,24 @@ HTML Content:
                             pass
                 return []
                 
+        except AuthenticationError as e:
+            logger.error("ERROR: OpenAI API key is invalid or not configured.")
+            logger.error("Please verify your OPENAI_API_KEY in the .env file.")
+            logger.error(f"Details: {str(e)}")
+            sys.exit(1)
+        except RateLimitError as e:
+            logger.error("ERROR: OpenAI API rate limit exceeded or insufficient tokens.")
+            logger.error("Please check your API account and try again later.")
+            logger.error(f"Details: {str(e)}")
+            sys.exit(1)
+        except APIError as e:
+            logger.error("ERROR: OpenAI API error occurred.")
+            logger.error(f"Details: {str(e)}")
+            sys.exit(1)
         except Exception as e:
-            logger.error(f"Extraction Agent: Error using OpenAI: {str(e)}")
-            return []
+            logger.error(f"ERROR: Unexpected error in Extraction Agent: {str(e)}")
+            logger.error("Please check your OpenAI API configuration and try again.")
+            sys.exit(1)
     
     async def extract_from_multiple_urls(self, urls: List[str]) -> List[Dict[str, str]]:
         """
@@ -222,10 +239,15 @@ HTML Content:
         
         Returns:
             Combined list of all coaches found
+        
+        Raises:
+            SystemExit: If OpenAI API is not configured or tokens are exhausted
         """
         all_coaches = []
         
         for url in urls:
+            # API errors will be caught and exit in extract_from_url
+            # Only catch non-API errors here (e.g., network issues for specific URLs)
             try:
                 coaches = await self.extract_from_url(url)
                 all_coaches.extend(coaches)
@@ -235,7 +257,11 @@ HTML Content:
                     logger.info(f"Extraction Agent: Found 10+ coaches, stopping extraction")
                     break
                     
+            except (AuthenticationError, RateLimitError, APIError):
+                # Re-raise API errors - they will be handled in extract_from_url
+                raise
             except Exception as e:
+                # Log non-API errors for specific URLs but continue with other URLs
                 logger.warning(f"Extraction Agent: Error extracting from {url}: {str(e)}")
                 continue
         

@@ -9,8 +9,10 @@ for reliable web search and result analysis.
 
 import logging
 import re
+import sys
 from typing import List
 from openai import OpenAI
+from openai import AuthenticationError, RateLimitError, APIError
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +22,6 @@ class DiscoveryAgent:
     Discovery Agent finds official athletics staff directory pages.
     
     Strategy:
-    - Generates candidate URLs from common patterns (fast initial strategy)
     - Uses OpenAI Responses API with web_search tool to search and analyze results
     - Prefers .edu domains and athletics subdomains
     - Filters out social media, news, non-official sites
@@ -47,38 +48,44 @@ class DiscoveryAgent:
         
         Returns:
             List of candidate URLs prioritized by trustworthiness
+        
+        Raises:
+            SystemExit: If OpenAI API is not configured or tokens are exhausted
         """
         logger.info(f"Discovery Agent: Searching for {school_name} {sport} coaching staff")
         
-        # Strategy 1: Generate candidate URLs from common patterns (quick fallback)
-        direct_urls = self._generate_candidate_urls(school_name, sport)
-        logger.info(f"Discovery Agent: Generated {len(direct_urls)} candidate URLs from patterns")
-        
-        # Strategy 2: Use OpenAI with web_search to find and analyze URLs
+        # Use OpenAI with web_search to find and analyze URLs
         try:
             search_urls = await self._search_with_openai(school_name, sport)
             logger.info(f"Discovery Agent: Found {len(search_urls)} URLs via OpenAI search")
+        except AuthenticationError as e:
+            logger.error("ERROR: OpenAI API key is invalid or not configured.")
+            logger.error("Please verify your OPENAI_API_KEY in the .env file.")
+            logger.error(f"Details: {str(e)}")
+            sys.exit(1)
+        except RateLimitError as e:
+            logger.error("ERROR: OpenAI API rate limit exceeded or insufficient tokens.")
+            logger.error("Please check your API account and try again later.")
+            logger.error(f"Details: {str(e)}")
+            sys.exit(1)
+        except APIError as e:
+            logger.error("ERROR: OpenAI API error occurred.")
+            logger.error(f"Details: {str(e)}")
+            sys.exit(1)
         except Exception as e:
-            logger.warning(f"Discovery Agent: OpenAI search failed: {str(e)}")
-            logger.info("Discovery Agent: Falling back to pattern-based URLs")
-            search_urls = []
+            logger.error(f"ERROR: Unexpected error in Discovery Agent: {str(e)}")
+            logger.error("Please check your OpenAI API configuration and try again.")
+            sys.exit(1)
         
-        # Combine and deduplicate
-        all_candidates = list(set(direct_urls + search_urls))
+        if not search_urls:
+            logger.warning("Discovery Agent: No URLs found via OpenAI search")
+            return []
         
-        # Prioritize results (prefer OpenAI results if available, then patterns)
-        if search_urls:
-            # If we have OpenAI results, prioritize them, then add pattern URLs
-            prioritized_urls = search_urls + [url for url in direct_urls if url not in search_urls]
-        else:
-            # Fallback to heuristic prioritization of pattern URLs
-            prioritized_urls = self._heuristic_prioritize(all_candidates)
-        
-        logger.info(f"Discovery Agent: Found {len(prioritized_urls)} candidate URLs")
-        for i, url in enumerate(prioritized_urls[:10], 1):  # Log top 10
+        logger.info(f"Discovery Agent: Found {len(search_urls)} candidate URLs")
+        for i, url in enumerate(search_urls[:10], 1):  # Log top 10
             logger.info(f"  {i}. {url}")
         
-        return prioritized_urls
+        return search_urls
     
     async def _search_with_openai(self, school_name: str, sport: str) -> List[str]:
         """
@@ -174,101 +181,16 @@ https://athletics.example.edu/staff
             logger.debug(f"Discovery Agent: OpenAI returned {len(unique_urls)} validated URLs")
             return unique_urls[:15]  # Limit to top 15
             
-        except Exception as e:
-            logger.error(f"Discovery Agent: Error using OpenAI search: {str(e)}")
+        except AuthenticationError:
+            # Re-raise authentication errors with context
             raise
-    
-    def _generate_candidate_urls(self, school_name: str, sport: str) -> List[str]:
-        """
-        Generate candidate URLs based on common athletics website patterns.
-        
-        This provides a fast initial strategy and fallback if OpenAI search fails.
-        
-        Args:
-            school_name: Name of the school
-            sport: Sport name
-        
-        Returns:
-            List of candidate URLs to try
-        """
-        candidates = []
-        
-        # Normalize school name for URL generation
-        # Extract domain-like part (e.g., "Clemson University" -> "clemson")
-        school_key = school_name.lower()
-        school_key = re.sub(r'\s+', '', school_key)
-        school_key = re.sub(r'university|college|state|tech', '', school_key)
-        school_key = school_key.strip()
-        
-        # Common URL patterns
-        base_patterns = [
-            f"https://{school_key}.edu/athletics/{sport.lower().replace(' ', '-')}/coaches",
-            f"https://{school_key}.edu/athletics/{sport.lower().replace(' ', '-')}/staff",
-            f"https://{school_key}.edu/athletics/{sport.lower().replace(' ', '-')}/roster",
-            f"https://{school_key}.edu/sports/{sport.lower().replace(' ', '-')}/coaches",
-            f"https://{school_key}.edu/sports/{sport.lower().replace(' ', '-')}/staff",
-            f"https://{school_key}.edu/sports/{sport.lower().replace(' ', '-')}/roster",
-            f"https://athletics.{school_key}.edu/{sport.lower().replace(' ', '-')}/coaches",
-            f"https://athletics.{school_key}.edu/{sport.lower().replace(' ', '-')}/staff",
-            f"https://{school_key}athletics.com/{sport.lower().replace(' ', '-')}/coaches",
-            f"https://www.{school_key}athletics.com/{sport.lower().replace(' ', '-')}/staff",
-        ]
-        
-        # Also try without sport-specific path
-        general_patterns = [
-            f"https://{school_key}.edu/athletics/staff",
-            f"https://{school_key}.edu/athletics/coaches",
-            f"https://athletics.{school_key}.edu/staff",
-            f"https://athletics.{school_key}.edu/coaches",
-        ]
-        
-        candidates.extend(base_patterns)
-        candidates.extend(general_patterns)
-        
-        return candidates
-    
-    def _heuristic_prioritize(self, urls: List[str]) -> List[str]:
-        """
-        Heuristic prioritization when OpenAI search is unavailable.
-        
-        Args:
-            urls: List of URLs to prioritize
-        
-        Returns:
-            Prioritized list
-        """
-        if not urls:
-            return []
-        
-        def score_url(url: str) -> int:
-            score = 0
-            url_lower = url.lower()
-            
-            # Prefer .edu domains
-            if '.edu' in url_lower:
-                score += 10
-            
-            # Prefer athletics subdomains
-            if 'athletics' in url_lower:
-                score += 5
-            
-            # Prefer keywords
-            if 'staff' in url_lower or 'coaches' in url_lower:
-                score += 3
-            
-            if 'roster' in url_lower:
-                score += 2
-            
-            # Penalize social media and news
-            if any(site in url_lower for site in ['twitter', 'facebook', 'instagram', 'linkedin', 'youtube']):
-                score -= 20
-            
-            if any(site in url_lower for site in ['news', 'article', 'blog', 'medium']):
-                score -= 10
-            
-            return score
-        
-        scored = [(url, score_url(url)) for url in urls]
-        scored.sort(key=lambda x: x[1], reverse=True)
-        
-        return [url for url, score in scored if score > 0]
+        except RateLimitError:
+            # Re-raise rate limit errors with context
+            raise
+        except APIError:
+            # Re-raise API errors with context
+            raise
+        except Exception as e:
+            # Wrap other exceptions as API errors
+            logger.error(f"Discovery Agent: Error using OpenAI search: {str(e)}")
+            raise APIError(f"OpenAI API request failed: {str(e)}") from e
