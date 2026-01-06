@@ -100,21 +100,25 @@ class DiscoveryAgent:
         Returns:
             List of prioritized URLs
         """
-        input_text = f"""Find the official athletics staff directory website for {school_name} {sport}.
+        input_text = f"""Find individual coach profile pages for {school_name} {sport} coaching staff.
 
-Search for and return ONLY the most relevant official URLs that contain coaching staff information.
+Search for and return ONLY URLs to individual coach profile/bio pages (one coach per page).
 
 Requirements:
-1. Must be official athletics websites (.edu domains or official athletics subdomains)
-2. Should contain coaching staff directories, rosters, or staff pages
-3. NOT social media, news articles, or third-party sites
+1. Must be official athletics websites
+2. Should be individual coach profile pages (NOT directory/roster pages with multiple coaches)
+3. Each URL should be a specific coach's page with their name
+4. NOT social media, news articles, or third-party sites
+5. Prefer pages that include email addresses and contact information
 
 Return ONLY a list of URLs, one per line, in order of relevance (most relevant first).
 Include only the URLs, nothing else.
+Aim for 10-15 individual coach profile URLs.
 
 Example format:
-https://example.edu/athletics/basketball/coaches
-https://athletics.example.edu/staff
+https://goduke.com/sports/football/roster/coaches/manny-diaz/5190
+https://goduke.com/sports/football/roster/coaches/harland-bower/5188
+https://ohiostatebuckeyes.com/sports/football/roster/coaches/ryan-day/2081
 """
 
         try:
@@ -163,12 +167,10 @@ https://athletics.example.edu/staff
             # Filter and validate URLs
             validated_urls = []
             for url in urls:
-                # Basic validation - must be .edu or athletics domain
-                if '.edu' in url or 'athletics' in url.lower():
-                    # Filter out social media and news
-                    url_lower = url.lower()
-                    if not any(site in url_lower for site in ['twitter', 'facebook', 'instagram', 'linkedin', 'youtube', 'news.com', 'article']):
-                        validated_urls.append(url)
+                # Filter out social media and news
+                url_lower = url.lower()
+                if not any(site in url_lower for site in ['twitter', 'facebook', 'instagram', 'linkedin', 'youtube', 'news.com', 'article']):
+                    validated_urls.append(url)
             
             # Remove duplicates while preserving order
             seen = set()
