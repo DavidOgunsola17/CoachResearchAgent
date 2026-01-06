@@ -51,14 +51,14 @@ TEST_CASES = [
 ]
 
 
-async def test_case(school_name: str, sport: str, gemini_api_key: str, web_scraper: WebScraper):
+async def test_case(school_name: str, sport: str, openai_api_key: str, web_scraper: WebScraper):
     """
     Test a single case and log detailed results.
     
     Args:
         school_name: School name
         sport: Sport name
-        gemini_api_key: Gemini API key
+        openai_api_key: OpenAI API key
         web_scraper: WebScraper instance
     """
     logger.info("")
@@ -70,7 +70,7 @@ async def test_case(school_name: str, sport: str, gemini_api_key: str, web_scrap
     try:
         # Step 1: Discovery
         logger.info(">>> STEP 1: Discovery Agent")
-        discovery_agent = DiscoveryAgent(gemini_api_key)
+        discovery_agent = DiscoveryAgent(openai_api_key)
         urls = await discovery_agent.discover_urls(school_name, sport)
         
         logger.info(f"URLs Discovered ({len(urls)}):")
@@ -84,7 +84,7 @@ async def test_case(school_name: str, sport: str, gemini_api_key: str, web_scrap
         # Step 2: Extraction
         logger.info("")
         logger.info(">>> STEP 2: Extraction Agent")
-        extraction_agent = ExtractionAgent(gemini_api_key, web_scraper)
+        extraction_agent = ExtractionAgent(openai_api_key, web_scraper)
         coaches = await extraction_agent.extract_from_multiple_urls(urls)
         
         logger.info(f"Coaches Extracted: {len(coaches)}")
@@ -174,11 +174,11 @@ async def main():
     """Run all test cases."""
     # Load environment variables
     load_dotenv()
-    gemini_api_key = os.getenv('GEMINI_API_KEY')
+    openai_api_key = os.getenv('OPENAI_API_KEY')
     
-    if not gemini_api_key:
-        logger.error("GEMINI_API_KEY not found in environment variables")
-        logger.error("Please create a .env file with: GEMINI_API_KEY=your_key_here")
+    if not openai_api_key:
+        logger.error("OPENAI_API_KEY not found in environment variables")
+        logger.error("Please create a .env file with: OPENAI_API_KEY=your_key_here")
         sys.exit(1)
     
     # Initialize web scraper
@@ -192,7 +192,7 @@ async def main():
             await test_case(
                 test_case_data['school'],
                 test_case_data['sport'],
-                gemini_api_key,
+                openai_api_key,
                 web_scraper
             )
             logger.info("")

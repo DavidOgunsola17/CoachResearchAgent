@@ -2,14 +2,14 @@
 Extraction Agent - Extracts raw coach data from HTML pages.
 
 This agent parses staff pages and extracts names, roles, and any listed contact info.
-It uses Gemini to understand page structure and extract structured data, ensuring
+It uses OpenAI to understand page structure and extract structured data, ensuring
 only explicit information is captured (no inference or guessing).
 """
 
 import json
 import logging
 from typing import List, Dict, Optional
-import google.generativeai as genai
+from openai import OpenAI
 
 from utils.web_scraper import WebScraper
 
@@ -22,22 +22,22 @@ class ExtractionAgent:
     
     Process:
     - Fetches HTML content using web scraper
-    - Uses Gemini to extract structured coach information
+    - Uses OpenAI to extract structured coach information
     - Only extracts explicitly visible data (no inference)
     - Filters out non-coaching staff
     - Limits to 10 coaches per page
     """
     
-    def __init__(self, gemini_api_key: str, web_scraper: WebScraper, model_name: str = "gemini-2.0-flash-exp"):
+    def __init__(self, openai_api_key: str, web_scraper: WebScraper, model_name: str = "o4-mini"):
         """
         Initialize the Extraction Agent.
         
         Args:
-            gemini_api_key: Google Gemini API key
+            openai_api_key: OpenAI API key
             web_scraper: WebScraper instance for fetching pages
-            model_name: Gemini model name (default: gemini-2.0-flash-exp)
+            model_name: OpenAI model name (default: o4-mini)
         """
-        genai.configure(api_key=gemini_api_key)
+        self.client = OpenAI(api_key=openai_api_key)
         self.model_name = model_name
         self.web_scraper = web_scraper
     
@@ -59,7 +59,7 @@ class ExtractionAgent:
             logger.warning(f"Extraction Agent: Failed to fetch HTML from {url}")
             return []
         
-        # Truncate HTML if too long (Gemini token limits)
+        # Truncate HTML if too long (OpenAI token limits)
         # Most pages should be fine, but some can be very large
         max_html_length = 150000  # Roughly 37k tokens (with some buffer)
         if len(html) > max_html_length:
@@ -67,16 +67,16 @@ class ExtractionAgent:
             # Try to keep the beginning (often contains main content)
             html = html[:max_html_length] + "... [truncated]"
         
-        # Extract using Gemini
-        coaches = await self._extract_with_gemini(html, url)
+        # Extract using OpenAI
+        coaches = await self._extract_with_openai(html, url)
         
         logger.info(f"Extraction Agent: Extracted {len(coaches)} coaches from {url}")
         
         return coaches
     
-    async def _extract_with_gemini(self, html: str, source_url: str) -> List[Dict[str, str]]:
+    async def _extract_with_openai(self, html: str, source_url: str) -> List[Dict[str, str]]:
         """
-        Use Gemini to extract structured coach data from HTML.
+        Use OpenAI to extract structured coach data from HTML.
         
         Args:
             html: HTML content
@@ -85,7 +85,7 @@ class ExtractionAgent:
         Returns:
             List of coach dictionaries
         """
-        prompt = f"""Analyze this HTML page and extract coaching staff information.
+        system_message = """You are a data extraction assistant. Analyze HTML pages and extract coaching staff information.
 
 CRITICAL RULES - READ CAREFULLY:
 1. ONLY extract information that is EXPLICITLY visible in the HTML
@@ -103,32 +103,28 @@ For each coach found, extract:
 
 If email or Twitter is not visible, leave that field empty.
 
-Source URL: {source_url}
-
 Return your results as a JSON object with a "coaches" key containing an array of objects.
 Each object must have these exact keys: name, position, email, twitter.
 If email or twitter is not found, use an empty string "".
-Limit to maximum 10 coaches.
+Limit to maximum 10 coaches."""
 
-Format: {{"coaches": [{{"name": "...", "position": "...", "email": "...", "twitter": "..."}}]}}
+        user_message = f"""Source URL: {source_url}
 
 HTML Content:
 {html[:100000]}"""  # Further truncate for the prompt
 
         try:
-            model = genai.GenerativeModel(
-                model_name=self.model_name,
-                generation_config={
-                    "temperature": 0.1,  # Low temperature for accurate extraction
-                    "max_output_tokens": 2000
-                }
+            response = self.client.chat.completions.create(
+                model=self.model_name,
+                messages=[
+                    {"role": "system", "content": system_message},
+                    {"role": "user", "content": user_message}
+                ],
+                response_format={"type": "json_object"},
+                temperature=0.1  # Low temperature for accurate extraction
             )
             
-            # Request JSON explicitly in prompt (works across all versions)
-            json_prompt = prompt + "\n\nIMPORTANT: Return ONLY valid JSON. No markdown, no explanation, just the JSON object."
-            
-            response = model.generate_content(json_prompt)
-            result = response.text.strip()
+            result = response.choices[0].message.content.strip()
             
             # Remove markdown code blocks if present
             if result.startswith("```json"):
@@ -214,7 +210,7 @@ HTML Content:
                 return []
                 
         except Exception as e:
-            logger.error(f"Extraction Agent: Error using Gemini: {str(e)}")
+            logger.error(f"Extraction Agent: Error using OpenAI: {str(e)}")
             return []
     
     async def extract_from_multiple_urls(self, urls: List[str]) -> List[Dict[str, str]]:

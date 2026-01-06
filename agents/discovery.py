@@ -3,14 +3,14 @@ Discovery Agent - Finds official athletics staff directory URLs.
 
 This agent searches for official athletics websites containing coaching staff information.
 It prefers .edu domains and official athletics subdomains, filtering out social media,
-news articles, and non-official sites. Uses Gemini with Google Search grounding for
-reliable web search and result analysis.
+news articles, and non-official sites. Uses OpenAI Responses API with web_search tool
+for reliable web search and result analysis.
 """
 
 import logging
 import re
 from typing import List
-import google.generativeai as genai
+from openai import OpenAI
 
 logger = logging.getLogger(__name__)
 
@@ -21,20 +21,20 @@ class DiscoveryAgent:
     
     Strategy:
     - Generates candidate URLs from common patterns (fast initial strategy)
-    - Uses Gemini with Google Search grounding to search and analyze results
+    - Uses OpenAI Responses API with web_search tool to search and analyze results
     - Prefers .edu domains and athletics subdomains
     - Filters out social media, news, non-official sites
     """
     
-    def __init__(self, gemini_api_key: str, model_name: str = "gemini-2.0-flash-exp"):
+    def __init__(self, openai_api_key: str, model_name: str = "o4-mini"):
         """
         Initialize the Discovery Agent.
         
         Args:
-            gemini_api_key: Google Gemini API key
-            model_name: Gemini model name (default: gemini-2.0-flash-exp)
+            openai_api_key: OpenAI API key
+            model_name: OpenAI model name (default: o4-mini)
         """
-        genai.configure(api_key=gemini_api_key)
+        self.client = OpenAI(api_key=openai_api_key)
         self.model_name = model_name
     
     async def discover_urls(self, school_name: str, sport: str) -> List[str]:
@@ -54,21 +54,21 @@ class DiscoveryAgent:
         direct_urls = self._generate_candidate_urls(school_name, sport)
         logger.info(f"Discovery Agent: Generated {len(direct_urls)} candidate URLs from patterns")
         
-        # Strategy 2: Use Gemini with Google Search to find and analyze URLs
+        # Strategy 2: Use OpenAI with web_search to find and analyze URLs
         try:
-            search_urls = await self._search_with_gemini(school_name, sport)
-            logger.info(f"Discovery Agent: Found {len(search_urls)} URLs via Gemini search")
+            search_urls = await self._search_with_openai(school_name, sport)
+            logger.info(f"Discovery Agent: Found {len(search_urls)} URLs via OpenAI search")
         except Exception as e:
-            logger.warning(f"Discovery Agent: Gemini search failed: {str(e)}")
+            logger.warning(f"Discovery Agent: OpenAI search failed: {str(e)}")
             logger.info("Discovery Agent: Falling back to pattern-based URLs")
             search_urls = []
         
         # Combine and deduplicate
         all_candidates = list(set(direct_urls + search_urls))
         
-        # Prioritize results (prefer Gemini results if available, then patterns)
+        # Prioritize results (prefer OpenAI results if available, then patterns)
         if search_urls:
-            # If we have Gemini results, prioritize them, then add pattern URLs
+            # If we have OpenAI results, prioritize them, then add pattern URLs
             prioritized_urls = search_urls + [url for url in direct_urls if url not in search_urls]
         else:
             # Fallback to heuristic prioritization of pattern URLs
@@ -80,9 +80,9 @@ class DiscoveryAgent:
         
         return prioritized_urls
     
-    async def _search_with_gemini(self, school_name: str, sport: str) -> List[str]:
+    async def _search_with_openai(self, school_name: str, sport: str) -> List[str]:
         """
-        Use Gemini with Google Search grounding to find official athletics pages.
+        Use OpenAI Responses API with web_search tool to find official athletics pages.
         
         This method performs web search and analyzes results in a single API call.
         
@@ -93,7 +93,7 @@ class DiscoveryAgent:
         Returns:
             List of prioritized URLs
         """
-        prompt = f"""Find the official athletics staff directory website for {school_name} {sport}.
+        input_text = f"""Find the official athletics staff directory website for {school_name} {sport}.
 
 Search for and return ONLY the most relevant official URLs that contain coaching staff information.
 
@@ -111,36 +111,47 @@ https://athletics.example.edu/staff
 """
 
         try:
-            model = genai.GenerativeModel(model_name=self.model_name)
+            # Use OpenAI Responses API with web_search tool
+            response = self.client.responses.create(
+                model=self.model_name,
+                tools=[{"type": "web_search"}],
+                input=input_text
+            )
             
-            # Try to enable Google Search if available, otherwise rely on model knowledge
-            try:
-                # Attempt to use Google Search grounding if supported
-                from google.generativeai import protos
-                response = model.generate_content(
-                    prompt,
-                    tools=[protos.Tool(google_search_retrieval=protos.GoogleSearchRetrieval())]
-                )
-            except (AttributeError, TypeError, ValueError, ImportError):
-                # Fallback: use model without explicit tools (may still use web search if model supports it)
-                logger.debug("Google Search grounding not available, using model knowledge")
-                response = model.generate_content(prompt)
-            
-            result_text = response.text.strip()
-            
-            # Parse URLs from response
+            # Extract URLs from response
             urls = []
-            for line in result_text.split('\n'):
-                line = line.strip()
-                # Extract URLs (handle various formats)
-                if line.startswith('http'):
-                    url = line.rstrip('.,;:)').split()[0]  # Take first word if multiple
-                    if url.startswith('http'):
-                        urls.append(url)
-                # Also look for URLs embedded in text
-                elif 'http' in line:
-                    url_matches = re.findall(r'https?://[^\s<>"\']+', line)
-                    urls.extend(url_matches)
+            
+            # Parse output_items to find message items with annotations
+            # The OpenAI SDK returns objects with attributes
+            if hasattr(response, 'output_items') and response.output_items:
+                for item in response.output_items:
+                    # Access attributes (OpenAI SDK returns objects, not dicts)
+                    if hasattr(item, 'type') and item.type == 'message':
+                        if hasattr(item, 'status') and item.status == 'completed':
+                            if hasattr(item, 'content') and item.content:
+                                for content_item in item.content:
+                                    if hasattr(content_item, 'type') and content_item.type == 'output_text':
+                                        if hasattr(content_item, 'annotations') and content_item.annotations:
+                                            for annotation in content_item.annotations:
+                                                if hasattr(annotation, 'type') and annotation.type == 'url_citation':
+                                                    if hasattr(annotation, 'url') and annotation.url:
+                                                        urls.append(annotation.url)
+            
+            # Also try to extract URLs from the output_text if annotations weren't found
+            if not urls and hasattr(response, 'output_text') and response.output_text:
+                result_text = response.output_text.strip()
+                # Parse URLs from response text
+                for line in result_text.split('\n'):
+                    line = line.strip()
+                    # Extract URLs (handle various formats)
+                    if line.startswith('http'):
+                        url = line.rstrip('.,;:)').split()[0]  # Take first word if multiple
+                        if url.startswith('http'):
+                            urls.append(url)
+                    # Also look for URLs embedded in text
+                    elif 'http' in line:
+                        url_matches = re.findall(r'https?://[^\s<>"\']+', line)
+                        urls.extend(url_matches)
             
             # Filter and validate URLs
             validated_urls = []
@@ -160,18 +171,18 @@ https://athletics.example.edu/staff
                     seen.add(url)
                     unique_urls.append(url)
             
-            logger.debug(f"Discovery Agent: Gemini returned {len(unique_urls)} validated URLs")
+            logger.debug(f"Discovery Agent: OpenAI returned {len(unique_urls)} validated URLs")
             return unique_urls[:15]  # Limit to top 15
             
         except Exception as e:
-            logger.error(f"Discovery Agent: Error using Gemini search: {str(e)}")
+            logger.error(f"Discovery Agent: Error using OpenAI search: {str(e)}")
             raise
     
     def _generate_candidate_urls(self, school_name: str, sport: str) -> List[str]:
         """
         Generate candidate URLs based on common athletics website patterns.
         
-        This provides a fast initial strategy and fallback if Gemini search fails.
+        This provides a fast initial strategy and fallback if OpenAI search fails.
         
         Args:
             school_name: Name of the school
@@ -218,7 +229,7 @@ https://athletics.example.edu/staff
     
     def _heuristic_prioritize(self, urls: List[str]) -> List[str]:
         """
-        Heuristic prioritization when Gemini search is unavailable.
+        Heuristic prioritization when OpenAI search is unavailable.
         
         Args:
             urls: List of URLs to prioritize

@@ -1,34 +1,37 @@
-# CoachResearchAgent
+### **SKOUT | Start the Recruitment Process FAST**
 
-**Recruiting Agent** is a streamlined tool that makes it easy for athletes to discover and contact college coaches.
+**Find Coaches. Save Contacts. Reach Out Fast.**
 
-You enter a **school name** and **select your sport** — the agent automatically pulls the **top 10 coaching staff members**, including:
+**SKOUT** (stylized as **SKT**) is a streamlined AI platform that removes the friction from college recruiting. For less than the cost of lunch, **SKOUT** replaces manual detective work with high-speed automation, giving athletes the tools to discover programs and build a contact base they control.
 
-- **Names & roles**
-- **Email addresses**
-- **Twitter accounts**
+The platform operates through two core modules:
 
-From there, you can:
+### **FND | Discovery Module**
 
-- **Save coaches** to your personal list by school
-- **Organize contacts** as you explore programs
-- **Select multiple coaches** and send outreach in batches
-    
-    *(email or Twitter — fast, consistent, scalable)*
-    
+Stop wasting hours on search engines. **FND** uses AI to instantly map out your target programs.
 
-The goal:
+- Enter a school and sport to pull the top 10 coaching staff members.
+- Get instant access to **Names, Roles, Email Addresses,** and **Twitter handles**.
+- Build your "Board"—save and organize programs into a centralized, action-ready list.
 
-make the recruiting process **simple**, **searchable**, and **action-ready** — no manual detective work, no scattered notes.
+### **AGT | Outreach Module**
+
+Consistency is what gets you recruited. **AGT** automates the heavy lifting of communication.
+
+- Select multiple coaches from your **FND** list and engage.
+- Send batch outreach via email or Twitter with one click.
+- Maintain a fast, professional, and scalable presence in coaches' inboxes.
 
 ---
+
+### **Why SKOUT?**
 
 ## Installation
 
 ### Prerequisites
 
 - Python 3.8 or higher
-- A Google Gemini API key
+- An OpenAI API key
 
 ### Setup Steps
 
@@ -43,19 +46,48 @@ make the recruiting process **simple**, **searchable**, and **action-ready** —
    
    This is required for web scraping. After installing the Python packages, run:
    ```bash
-   playwright install chromium
+   sudo apt-get update && sudo apt-get install -y \
+    libatk1.0-0t64 \
+    libatk-bridge2.0-0t64 \
+    libcups2t64 \
+    libdrm2 \
+    libxkbcommon0 \
+    libatspi2.0-0t64 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxfixes3 \
+    libxrandr2 \
+    libgbm1 \
+    libasound2t64 \
+    libxcb1 \
+    libxshmfence1 \
+    libglib2.0-0t64 \
+    libnss3 \
+    libnspr4 \
+    libdbus-1-3 \
+    libexpat1 \
+    libx11-6 \
+    libxcb-shm0 \
+    libxcb-shape0 \
+    libxext6 \
+    libxrender1 \
+    libxtst6 \
+    libxi6 \
+    libpango-1.0-0 \
+    libcairo2 \
+    libgdk-pixbuf-2.0-0
    ```
    
    > **Note:** If you're using a DevContainer or Codespaces, browsers are installed automatically during container setup.
 
 4. **Set up environment variables:**
    
-   Create a `.env` file in the project root with your Gemini API key:
+   Create a `.env` file in the project root with your OpenAI API key:
    ```bash
-   echo "GEMINI_API_KEY=your_api_key_here" > .env
+   echo "OPENAI_API_KEY=your_api_key_here" > .env
    ```
    
-   Replace `your_api_key_here` with your actual Google Gemini API key.
+   Replace `your_api_key_here` with your actual OpenAI API key.
 
 ---
 
@@ -97,16 +129,9 @@ The agent generates a CSV file with coaching staff information including:
 
 The CSV file is saved in the project directory with a name like `Duke_Football_Coaches.csv`.
 
----
 
-### **Why it exists**
+- **Speed:** **FND** eliminates the manual detective work of finding staff.
+- **Control:** Build a private database of contacts that you own and manage.
+- **Scale:** **AGT** ensures you stay consistent with outreach while others fall behind.
 
-Finding coaches takes time. Tracking them takes effort.
-
-Outreach usually happens too late — or not at all.
-
-Recruiting Agent removes friction so you can:
-
-- **Discover programs quickly**
-- **Build a contact base you control**
-- **Stay consistent with outreach**
+**SKOUT: Simple. Searchable. Action-Ready.**

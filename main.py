@@ -69,11 +69,11 @@ Examples:
     
     # Load environment variables
     load_dotenv()
-    gemini_api_key = os.getenv('GEMINI_API_KEY')
+    openai_api_key = os.getenv('OPENAI_API_KEY')
     
-    if not gemini_api_key:
-        logger.error("GEMINI_API_KEY not found in environment variables")
-        logger.error("Please create a .env file with: GEMINI_API_KEY=your_key_here")
+    if not openai_api_key:
+        logger.error("OPENAI_API_KEY not found in environment variables")
+        logger.error("Please create a .env file with: OPENAI_API_KEY=your_key_here")
         sys.exit(1)
     
     # Initialize web scraper
@@ -86,7 +86,7 @@ Examples:
             logger.info("STEP 1: Discovery Agent")
             logger.info("=" * 60)
             
-            discovery_agent = DiscoveryAgent(gemini_api_key)
+            discovery_agent = DiscoveryAgent(openai_api_key)
             urls = await discovery_agent.discover_urls(school_name, sport)
             
             if not urls:
@@ -99,7 +99,7 @@ Examples:
             logger.info("STEP 2: Extraction Agent")
             logger.info("=" * 60)
             
-            extraction_agent = ExtractionAgent(gemini_api_key, web_scraper)
+            extraction_agent = ExtractionAgent(openai_api_key, web_scraper)
             coaches = await extraction_agent.extract_from_multiple_urls(urls)
             
             if not coaches:
