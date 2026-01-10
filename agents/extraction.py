@@ -30,7 +30,7 @@ class ExtractionAgent:
     - Limits to 10 coaches per page
     """
     
-    def __init__(self, openai_api_key: str, web_scraper: WebScraper, model_name: str = "o4-mini"):
+    def __init__(self, openai_api_key: str, web_scraper: WebScraper, model_name: str = "gpt-4o-mini-search-preview"):
         """
         Initialize the Extraction Agent.
         
