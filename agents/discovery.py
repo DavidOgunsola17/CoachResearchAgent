@@ -27,7 +27,7 @@ class DiscoveryAgent:
     - Filters out social media, news, non-official sites
     """
     
-    def __init__(self, openai_api_key: str, model_name: str = "o4-mini"):
+    def __init__(self, openai_api_key: str, model_name: str = "gpt-4o-mini-search-preview"):
         """
         Initialize the Discovery Agent.
         
