@@ -3,6 +3,8 @@ Web scraper utility using Playwright for browser automation.
 
 This module provides async functions to fetch and extract HTML content from web pages,
 handling dynamic content, anti-scraping measures, and error cases gracefully.
+
+UPDATED: Increased timeout to 60 seconds (was 30) to handle slow athletics websites.
 """
 
 import asyncio
@@ -22,15 +24,18 @@ class WebScraper:
     - Dynamic content loading
     - Anti-scraping measures (rate limiting, retries)
     - Timeout management
+    
+    UPDATED: Increased default timeout from 30s to 60s for slow sites
     """
     
-    def __init__(self, headless: bool = True, timeout: int = 30000):
+    def __init__(self, headless: bool = True, timeout: int = 60000):  # CHANGED: 60000 (was 30000)
         """
         Initialize the web scraper.
         
         Args:
             headless: Run browser in headless mode (default: True)
-            timeout: Page load timeout in milliseconds (default: 30000)
+            timeout: Page load timeout in milliseconds (default: 60000 = 60 seconds)
+                     INCREASED from 30s to handle slow athletics websites
         """
         self.headless = headless
         self.timeout = timeout
@@ -112,7 +117,7 @@ class WebScraper:
                     'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
                 })
                 
-                # Navigate with timeout
+                # Navigate with timeout (now 60 seconds)
                 await page.goto(url, wait_until='networkidle', timeout=self.timeout)
                 
                 # Wait for page to be fully loaded
@@ -193,4 +198,3 @@ async def fetch_html(url: str, headless: bool = True) -> Optional[str]:
     """
     async with WebScraper(headless=headless) as scraper:
         return await scraper.extract_html(url)
-
