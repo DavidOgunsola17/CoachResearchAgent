@@ -1,8 +1,8 @@
 """
 Normalization Agent - Standardizes and cleans extracted data.
 
-This agent standardizes names, positions, and Twitter URLs, ensures CSV-safe formatting,
-removes duplicates, and limits the final output to 10 coaches.
+This agent standardizes names, positions, phone numbers, and social media URLs,
+ensures CSV-safe formatting, removes duplicates, and limits the final output to 15 coaches.
 """
 
 import logging
@@ -21,11 +21,12 @@ class NormalizationAgent:
     Operations:
     - Standardizes name formatting (Title Case)
     - Normalizes position titles
-    - Converts Twitter URLs to canonical format
+    - Cleans phone numbers (NEW)
+    - Converts Twitter/social URLs to canonical format
     - Strips @ symbols from handles
     - Ensures CSV-safe formatting
     - Removes duplicates
-    - Limits to 10 coaches
+    - NOW LIMITS TO 15 COACHES (was 10)
     """
     
     def normalize_coaches(self, coaches: List[Dict[str, str]]) -> List[Dict[str, str]]:
@@ -36,7 +37,7 @@ class NormalizationAgent:
             coaches: List of coach dictionaries
         
         Returns:
-            Cleaned, normalized coach list (max 10)
+            Cleaned, normalized coach list (max 15)
         """
         if not coaches:
             return []
@@ -59,9 +60,9 @@ class NormalizationAgent:
                 seen.add(key)
                 normalized.append(normalized_coach)
                 
-                # Stop at 10 coaches
-                if len(normalized) >= 10:
-                    logger.info(f"Normalization Agent: Reached limit of 10 coaches")
+                # CHANGED: Stop at 15 coaches (was 10)
+                if len(normalized) >= 15:
+                    logger.info(f"Normalization Agent: Reached limit of 15 coaches")
                     break
         
         logger.info(f"Normalization Agent: Normalized to {len(normalized)} unique coaches")
@@ -70,6 +71,8 @@ class NormalizationAgent:
     def _normalize_coach(self, coach: Dict[str, str]) -> Dict[str, str]:
         """
         Normalize a single coach's data.
+        
+        NEW: Added phone field normalization
         
         Args:
             coach: Coach dictionary
@@ -81,6 +84,7 @@ class NormalizationAgent:
             'name': self._normalize_name(coach.get('name', '')),
             'position': self._normalize_position(coach.get('position', '')),
             'email': self._normalize_email(coach.get('email', '')),
+            'phone': self._normalize_phone(coach.get('phone', '')),  # NEW FIELD
             'twitter': self._normalize_twitter(coach.get('twitter', '')),
             'source_url': coach.get('source_url', '')
         }
@@ -181,15 +185,44 @@ class NormalizationAgent:
         
         return ''
     
+    def _normalize_phone(self, phone: str) -> str:
+        """
+        Normalize phone number.
+        
+        NEW METHOD: Cleans up phone numbers while preserving formatting
+        
+        Args:
+            phone: Phone string
+        
+        Returns:
+            Normalized phone (digits and basic formatting only)
+        """
+        if not phone:
+            return ''
+        
+        phone = phone.strip()
+        
+        # Remove common prefixes
+        phone = re.sub(r'^(tel:|phone:|p:)', '', phone, flags=re.IGNORECASE)
+        
+        # Keep only digits, spaces, parentheses, hyphens, plus, periods
+        phone = re.sub(r'[^\d\s()\-+.x]', '', phone)
+        
+        # Remove excessive whitespace
+        phone = ' '.join(phone.split())
+        
+        return phone.strip()
+    
     def _normalize_twitter(self, twitter: str) -> str:
         """
-        Normalize Twitter handle/URL to canonical format.
+        Normalize Twitter/social media handle/URL to canonical format.
         
+        UPDATED: Now handles Twitter/X and other social media
         Converts to: https://twitter.com/handle
         Strips @ symbols and handles various input formats.
         
         Args:
-            twitter: Twitter handle or URL
+            twitter: Twitter/social handle or URL
         
         Returns:
             Normalized Twitter URL or empty string
@@ -211,17 +244,21 @@ class NormalizationAgent:
             handle = handle_match.group(1).lower()
             return f"https://twitter.com/{handle}"
         
-        # Try to extract handle directly
+        # Try to extract handle directly (for @handle or plain handle)
         handle_match = re.search(r'@?([a-zA-Z0-9_]+)', twitter)
         if handle_match:
             handle = handle_match.group(1).lower()
-            return f"https://twitter.com/{handle}"
+            # Only return if it looks like a valid handle (3-15 chars, alphanumeric + underscore)
+            if 3 <= len(handle) <= 15 and re.match(r'^[a-zA-Z0-9_]+$', handle):
+                return f"https://twitter.com/{handle}"
         
         return ''
     
     def _escape_csv_field(self, field: str) -> str:
         """
         Escape a field for CSV safety.
+        
+        Note: Python's csv module handles this automatically, but keeping for reference
         
         Args:
             field: Field value
@@ -239,4 +276,3 @@ class NormalizationAgent:
             return f'"{escaped}"'
         
         return field
-
