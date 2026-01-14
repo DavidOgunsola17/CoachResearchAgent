@@ -2,29 +2,37 @@
 
 **Find Coaches. Save Contacts. Reach Out Fast.**
 
-**SKOUT** (stylized as **SKT**) is a streamlined AI platform that removes the friction from college recruiting. For less than the cost of lunch, **SKOUT** replaces manual detective work with high-speed automation, giving athletes the tools to discover programs and build a contact base they control.
+**SKOUT** is a streamlined AI platform that removes the friction from college recruiting. For less than the cost of lunch, **SKOUT** replaces manual detective work with high-speed automation, giving athletes the tools to discover programs and build a contact base they control.
 
 The platform operates through two core modules:
 
-### **FND | Discovery Module**
+### **Discovery and Search Module**
 
-Stop wasting hours on search engines. **FND** uses AI to instantly map out your target programs.
+Stop wasting hours on search engines. **SKOUT** uses AI to instantly map out your target programs.
 
 - Enter a school and sport to pull the top 10 coaching staff members.
 - Get instant access to **Names, Roles, Email Addresses,** and **Twitter handles**.
 - Build your "Board"—save and organize programs into a centralized, action-ready list.
 
-### **AGT | Outreach Module**
+### **Outreach and Messaging Module**
 
-Consistency is what gets you recruited. **AGT** automates the heavy lifting of communication.
+Consistency is what gets you recruited. **SKOUT** automates the heavy lifting of communication.
 
-- Select multiple coaches from your **FND** list and engage.
+- Select multiple coaches from your contact list and engage.
 - Send batch outreach via email or Twitter with one click.
 - Maintain a fast, professional, and scalable presence in coaches' inboxes.
 
 ---
 
 ### **Why SKOUT?**
+
+- **Speed:** Automated discovery eliminates the manual detective work of finding staff.
+- **Control:** Build a private database of contacts that you own and manage.
+- **Scale:** Automated outreach ensures you stay consistent with outreach while others fall behind.
+
+**SKOUT: Simple. Searchable. Action-Ready.**
+
+---
 
 ## Installation
 
@@ -38,14 +46,14 @@ Consistency is what gets you recruited. **AGT** automates the heavy lifting of c
 1. **Clone the repository** (if you haven't already)
 
 2. **Install Python dependencies:**
-   ```bash
+```bash
    pip install -r requirements.txt
-   ```
+```
 
 3. **Install Playwright browsers:**
    
    This is required for web scraping. After installing the Python packages, run:
-   ```bash
+```bash
    sudo apt-get update && sudo apt-get install -y \
     libatk1.0-0t64 \
     libatk-bridge2.0-0t64 \
@@ -76,16 +84,21 @@ Consistency is what gets you recruited. **AGT** automates the heavy lifting of c
     libpango-1.0-0 \
     libcairo2 \
     libgdk-pixbuf-2.0-0
-   ```
+```
+   
+   Then install the browser:
+```bash
+   playwright install chromium
+```
    
    > **Note:** If you're using a DevContainer or Codespaces, browsers are installed automatically during container setup.
 
 4. **Set up environment variables:**
    
    Create a `.env` file in the project root with your OpenAI API key:
-   ```bash
+```bash
    echo "OPENAI_API_KEY=your_api_key_here" > .env
-   ```
+```
    
    Replace `your_api_key_here` with your actual OpenAI API key.
 
@@ -96,13 +109,11 @@ Consistency is what gets you recruited. **AGT** automates the heavy lifting of c
 ### Basic Usage
 
 Run the agent with a school name and sport:
-
 ```bash
 python main.py "School Name" "Sport"
 ```
 
 ### Examples
-
 ```bash
 # Football coaches at Duke
 python main.py "duke" "football"
@@ -123,15 +134,59 @@ python main.py "Stanford University" "Women's Soccer"
 ### Output
 
 The agent generates a CSV file with coaching staff information including:
-- Names and roles
-- Email addresses (when available)
-- Twitter handles (when available)
+- Coach names
+- Positions/titles
+- Email addresses (when available on directory page)
+- Phone numbers (when available on directory page)
+- Social media handles (when available on directory page)
+- Source URL
 
-The CSV file is saved in the project directory with a name like `Duke_Football_Coaches.csv`.
+The CSV file is saved in the project directory with a name like `duke_football_coaches.csv`.
 
+### How It Works
 
-- **Speed:** **FND** eliminates the manual detective work of finding staff.
-- **Control:** Build a private database of contacts that you own and manage.
-- **Scale:** **AGT** ensures you stay consistent with outreach while others fall behind.
+1. **Discovery**: Finds official athletics staff directory pages using AI-powered web search
+2. **Extraction**: Scrapes contact information from directory pages using GPT-4
+3. **Normalization**: Cleans and standardizes all data
+4. **CSV Export**: Outputs clean, organized data ready for outreach
+
+**Expected runtime**: 30-60 seconds per school
+
+---
+
+## Project Structure
+```
+├── agents/
+│   ├── discovery.py       # Finds staff directory pages
+│   ├── extraction.py      # Extracts coach data from HTML
+│   └── normalization.py   # Cleans and standardizes data
+├── utils/
+│   ├── web_scraper.py     # Playwright-based web scraping
+│   └── csv_writer.py      # CSV file generation
+├── main.py                # CLI entry point
+├── requirements.txt       # Python dependencies
+└── README.md             # This file
+```
+
+---
+
+## Troubleshooting
+
+**"No coaches found"**: The school's athletics website structure may be unusual. Try different variations of the school name.
+
+**Timeout errors**: Some athletics websites are slow. The scraper will retry automatically.
+
+**Missing contact info**: Not all schools publish email/phone on their directory pages. The tool extracts whatever is publicly available.
+
+---
+
+## Future Development
+
+- **AGT Module**: Automated email and social media outreach
+- **Web Interface**: No-code UI for non-technical users
+- **Database Storage**: Save and organize multiple schools
+- **Advanced Filtering**: Filter by position, sport, conference
+
+---
 
 **SKOUT: Simple. Searchable. Action-Ready.**
