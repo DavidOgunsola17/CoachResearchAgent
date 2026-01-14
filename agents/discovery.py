@@ -2,9 +2,8 @@
 Discovery Agent - Finds official athletics staff directory URLs.
 
 This agent searches for official athletics websites containing coaching staff information.
-It prefers .edu domains and official athletics subdomains, filtering out social media,
-news articles, and non-official sites. Uses OpenAI Responses API with web_search tool
-for reliable web search and result analysis.
+It NOW focuses on finding DIRECTORY PAGES (one page with all coaches) rather than 
+individual coach bio pages. Prefers .edu domains and official athletics subdomains.
 """
 
 import logging
@@ -25,6 +24,7 @@ class DiscoveryAgent:
     - Uses OpenAI Responses API with web_search tool to search and analyze results
     - Prefers .edu domains and athletics subdomains
     - Filters out social media, news, non-official sites
+    - NOW FOCUSES ON DIRECTORY PAGES (not individual coach pages)
     """
     
     def __init__(self, openai_api_key: str, model_name: str = "gpt-4o-mini-search-preview"):
@@ -33,7 +33,7 @@ class DiscoveryAgent:
         
         Args:
             openai_api_key: OpenAI API key
-            model_name: OpenAI model name (default: o4-mini)
+            model_name: OpenAI model name (default: gpt-4o-mini-search-preview)
         """
         self.client = OpenAI(api_key=openai_api_key)
         self.model_name = model_name
@@ -47,17 +47,17 @@ class DiscoveryAgent:
             sport: Sport name (e.g., "Men's Basketball")
         
         Returns:
-            List of candidate URLs prioritized by trustworthiness
+            List of candidate directory URLs prioritized by trustworthiness
         
         Raises:
             SystemExit: If OpenAI API is not configured or tokens are exhausted
         """
-        logger.info(f"Discovery Agent: Searching for {school_name} {sport} coaching staff")
+        logger.info(f"Discovery Agent: Searching for {school_name} {sport} coaching staff directory")
         
         # Use OpenAI with web_search to find and analyze URLs
         try:
             search_urls = await self._search_with_openai(school_name, sport)
-            logger.info(f"Discovery Agent: Found {len(search_urls)} URLs via OpenAI search")
+            logger.info(f"Discovery Agent: Found {len(search_urls)} directory URLs via OpenAI search")
         except AuthenticationError as e:
             logger.error("ERROR: OpenAI API key is invalid or not configured.")
             logger.error("Please verify your OPENAI_API_KEY in the .env file.")
@@ -81,44 +81,47 @@ class DiscoveryAgent:
             logger.warning("Discovery Agent: No URLs found via OpenAI search")
             return []
         
-        logger.info(f"Discovery Agent: Found {len(search_urls)} candidate URLs")
-        for i, url in enumerate(search_urls[:10], 1):  # Log top 10
+        # Log top results for debugging
+        logger.info(f"Discovery Agent: Found {len(search_urls)} candidate directory URLs")
+        for i, url in enumerate(search_urls[:5], 1):  # Log top 5
             logger.info(f"  {i}. {url}")
         
         return search_urls
     
     async def _search_with_openai(self, school_name: str, sport: str) -> List[str]:
         """
-        Use OpenAI Responses API with web_search tool to find official athletics pages.
+        Use OpenAI Responses API with web_search tool to find official athletics directory pages.
         
-        This method performs web search and analyzes results in a single API call.
+        UPDATED PROMPT: Now explicitly asks for directory pages, not individual coach pages.
         
         Args:
             school_name: Name of the school
             sport: Sport name
         
         Returns:
-            List of prioritized URLs
+            List of prioritized directory URLs
         """
-        input_text = f"""Find individual coach profile pages for {school_name} {sport} coaching staff.
-
-Search for and return ONLY URLs to individual coach profile/bio pages (one coach per page).
+        # NEW PROMPT: Focus on directory pages with all coaches listed
+        input_text = f"""Find the main coaching staff directory page for {school_name} {sport}.
 
 Requirements:
-1. Must be official athletics websites
-2. Should be individual coach profile pages (NOT directory/roster pages with multiple coaches)
-3. Each URL should be a specific coach's page with their name
-4. NOT social media, news articles, or third-party sites
-5. Prefer pages that include email addresses and contact information
+1. ONE page that lists ALL coaches in a directory/roster format (not individual bio pages)
+2. Official athletics website (.edu domain strongly preferred)
+3. Page should show: names, titles, and contact information (emails, phone, Twitter, etc.)
+4. NOT individual coach bio pages (URLs should NOT have coach names in them)
+5. NOT social media, news articles, or third-party sites
 
-Return ONLY a list of URLs, one per line, in order of relevance (most relevant first).
-Include only the URLs, nothing else.
-Aim for 10-15 individual coach profile URLs.
+Good examples of directory pages:
+- goduke.com/sports/football/coaches (lists all coaches)
+- ohiostatebuckeyes.com/sports/m-baskbl/staff (staff directory)
+- gostanford.com/sports/wsoc/coaches (coaching staff page)
 
-Example format:
-https://goduke.com/sports/football/roster/coaches/manny-diaz/5190
-https://goduke.com/sports/football/roster/coaches/harland-bower/5188
-https://ohiostatebuckeyes.com/sports/football/roster/coaches/ryan-day/2081
+Bad examples (individual pages):
+- goduke.com/sports/football/roster/coaches/mike-elko/4315 (one coach only)
+- twitter.com/DukeFOOTBALL (social media)
+- espn.com/college-football/story (news article)
+
+Return 3-5 directory page URLs, most relevant first. URLs only, one per line.
 """
 
         try:
@@ -167,10 +170,13 @@ https://ohiostatebuckeyes.com/sports/football/roster/coaches/ryan-day/2081
             # Filter and validate URLs
             validated_urls = []
             for url in urls:
-                # Filter out social media and news
                 url_lower = url.lower()
-                if not any(site in url_lower for site in ['twitter', 'facebook', 'instagram', 'linkedin', 'youtube', 'news.com', 'article']):
-                    validated_urls.append(url)
+                # Filter out social media and news
+                if not any(site in url_lower for site in ['twitter', 'facebook', 'instagram', 'linkedin', 'youtube', 'news.com', 'article', 'espn.com']):
+                    # NEW: Filter out individual coach pages (URLs with coach names/IDs at end)
+                    # We want directory pages like /coaches or /staff, not /coaches/john-smith/123
+                    if not re.search(r'/coaches/[^/]+/\d+', url_lower) and not re.search(r'/roster/coaches/[^/]+', url_lower):
+                        validated_urls.append(url)
             
             # Remove duplicates while preserving order
             seen = set()
@@ -180,8 +186,8 @@ https://ohiostatebuckeyes.com/sports/football/roster/coaches/ryan-day/2081
                     seen.add(url)
                     unique_urls.append(url)
             
-            logger.debug(f"Discovery Agent: OpenAI returned {len(unique_urls)} validated URLs")
-            return unique_urls[:15]  # Limit to top 15
+            logger.debug(f"Discovery Agent: OpenAI returned {len(unique_urls)} validated directory URLs")
+            return unique_urls[:5]  # Return top 5 directory pages (was 15 individual pages)
             
         except AuthenticationError:
             # Re-raise authentication errors with context
