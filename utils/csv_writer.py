@@ -3,6 +3,8 @@ CSV Writer utility for writing coach data to CSV files.
 
 This module handles CSV writing with proper formatting, special character handling,
 and filename generation from school and sport names.
+
+UPDATED: Added 'coach_phone' column to CSV output.
 """
 
 import csv
@@ -22,14 +24,19 @@ class CSVWriter:
     - Special character escaping
     - Filename generation from school + sport
     - Source URL inclusion
+    
+    UPDATED: Now includes phone number column
     """
     
-    CSV_COLUMNS = ['coach_name', 'coach_position', 'coach_email', 'coach_twitter', 'source_url']
+    # CHANGED: Added 'coach_phone' column
+    CSV_COLUMNS = ['coach_name', 'coach_position', 'coach_email', 'coach_phone', 'coach_twitter', 'source_url']
     
     @staticmethod
     def write_coaches(coaches: List[Dict[str, str]], filename: str) -> bool:
         """
         Write coaches to CSV file.
+        
+        UPDATED: Now writes phone number field
         
         Args:
             coaches: List of coach dictionaries
@@ -51,10 +58,12 @@ class CSVWriter:
                 
                 # Write coach rows
                 for coach in coaches:
+                    # CHANGED: Added 'coach_phone' field
                     row = {
                         'coach_name': coach.get('name', ''),
                         'coach_position': coach.get('position', ''),
                         'coach_email': coach.get('email', ''),
+                        'coach_phone': coach.get('phone', ''),  # NEW FIELD
                         'coach_twitter': coach.get('twitter', ''),
                         'source_url': coach.get('source_url', '')
                     }
@@ -132,4 +141,3 @@ class CSVWriter:
             normalized = normalized.rstrip('_')
         
         return normalized if normalized else 'unknown'
-
