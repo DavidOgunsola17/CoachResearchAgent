@@ -1,128 +1,94 @@
 """
-Extraction Agent - Extracts raw coach data from HTML pages.
+Extraction Agent - Extracts raw coach data from directory pages using web_search.
 
-This agent parses staff DIRECTORY pages and extracts names, roles, and any listed contact info.
-NOW EXTRACTS FROM DIRECTORY PAGES (not individual pages) and grabs WHATEVER contact info
-is visible: email, phone, Twitter/social media, etc.
+This agent uses OpenAI's web_search tool to visit and analyze directory pages directly,
+eliminating HTML parsing issues and hallucinations.
 """
 
 import json
 import logging
 import sys
-from typing import List, Dict, Optional
+from typing import List, Dict
 from openai import OpenAI
 from openai import AuthenticationError, RateLimitError, APIError
-
-from utils.web_scraper import WebScraper
 
 logger = logging.getLogger(__name__)
 
 
 class ExtractionAgent:
     """
-    Extraction Agent extracts coach data from HTML directory pages.
+    Extraction Agent extracts coach data by visiting directory pages with web_search.
     
     Process:
-    - Fetches HTML content using web scraper
-    - Uses OpenAI to extract structured coach information from directory pages
-    - Grabs WHATEVER contact info is visible (email, phone, Twitter, etc.)
-    - Only extracts explicitly visible data (no inference)
-    - Filters out non-coaching staff
-    - NOW RETURNS UP TO 15 COACHES (was 10)
+    - Uses OpenAI web_search to visit and analyze directory URLs
+    - Extracts structured coach information from visible page content
+    - Grabs all visible contact info (email, phone, Twitter, etc.)
+    - Returns up to 15 coaches per URL
     """
     
-    def __init__(self, openai_api_key: str, web_scraper: WebScraper, model_name: str = "gpt-4o-mini-search-preview"):
+    def __init__(self, openai_api_key: str, model_name: str = "gpt-4o-mini"):
         """
         Initialize the Extraction Agent.
         
         Args:
             openai_api_key: OpenAI API key
-            web_scraper: WebScraper instance for fetching pages
-            model_name: OpenAI model name (default: gpt-4o-mini-search-preview)
+            model_name: OpenAI model name with search capability
         """
         self.client = OpenAI(api_key=openai_api_key)
         self.model_name = model_name
-        self.web_scraper = web_scraper
     
     async def extract_from_url(self, url: str) -> List[Dict[str, str]]:
         """
-        Extract coach data from a single directory URL.
+        Extract coach data from a single directory URL using web_search.
         
         Args:
             url: Directory URL to extract data from
         
         Returns:
             List of coach dictionaries with keys: name, position, email, phone, twitter
-            (any field can be empty string if not found on page)
         """
-        logger.info(f"Extraction Agent: Extracting from {url}")
+        logger.info(f"Extraction Agent: Analyzing {url}")
         
-        # Fetch HTML
-        html = await self.web_scraper.extract_html(url)
-        if not html:
-            logger.warning(f"Extraction Agent: Failed to fetch HTML from {url}")
-            return []
-        
-        # Truncate HTML if too long (OpenAI token limits)
-        # Most pages should be fine, but some can be very large
-        max_html_length = 150000  # Roughly 37k tokens (with some buffer)
-        if len(html) > max_html_length:
-            logger.info(f"Extraction Agent: HTML too long ({len(html)} chars), truncating")
-            # Try to keep the beginning (often contains main content)
-            html = html[:max_html_length] + "... [truncated]"
-        
-        # Extract using OpenAI
-        coaches = await self._extract_with_openai(html, url)
+        # Extract using OpenAI web_search
+        coaches = await self._extract_with_websearch(url)
         
         logger.info(f"Extraction Agent: Extracted {len(coaches)} coaches from {url}")
         
         return coaches
     
-    async def _extract_with_openai(self, html: str, source_url: str) -> List[Dict[str, str]]:
+    async def _extract_with_websearch(self, source_url: str) -> List[Dict[str, str]]:
         """
-        Use OpenAI to extract structured coach data from HTML directory page.
-        
-        UPDATED SYSTEM PROMPT: Now asks for ALL visible contact info (email, phone, Twitter, etc.)
+        Use OpenAI web_search to visit and extract coach data from directory page.
         
         Args:
-            html: HTML content
-            source_url: Source URL for reference
+            source_url: URL to visit and extract from
         
         Returns:
-            List of coach dictionaries with name, position, email, phone, twitter fields
+            List of coach dictionaries
         """
-        # NEW SYSTEM PROMPT: Extract whatever contact info is visible
-        system_message = """You are a data extraction assistant. Analyze HTML from coaching staff directory pages.
+        system_message = """You are a data extraction assistant specializing in coaching staff directories.
 
-CRITICAL RULES - READ CAREFULLY:
-1. Extract ALL coaches listed on the page (not just head coach)
-2. For each coach, grab WHATEVER contact info is visible on the page:
-   - Email (if shown)
-   - Phone number (if shown)
-   - Twitter/X handle or URL (if shown)
-   - Any other social media (treat as twitter field)
-3. ONLY extract information that is EXPLICITLY visible in the HTML - do NOT guess or infer
+CRITICAL INSTRUCTIONS:
+1. Visit the provided URL and extract ALL coaches listed on the page
+2. For each coach, extract ONLY information that is EXPLICITLY visible:
+   - Full name (exactly as shown)
+   - Position/title (exactly as shown)
+   - Email address (ONLY if displayed on the page)
+   - Phone number (ONLY if displayed on the page)
+   - Twitter/social media handle or URL (ONLY if displayed on the page)
+3. Do NOT guess, infer, or make up any information
 4. Include all coaching positions: Head Coach, Assistant Coach, Associate Coach, Coordinator, Director, etc.
-5. EXCLUDE: trainers, medical staff, equipment managers, interns (unless title explicitly says "Coach")
+5. EXCLUDE: trainers, medical staff, equipment managers, non-coaching staff
 
-For each coach found, extract:
-- Full name (as it appears)
-- Position/title (as it appears)
-- Email address (ONLY if explicitly written/displayed - leave empty if not found)
-- Phone number (ONLY if explicitly written/displayed - leave empty if not found)
-- Twitter/social media (ONLY if there's an actual link - leave empty if not found)
+If a field is not visible on the page, use an empty string "".
 
-If email, phone, or Twitter is not visible, use an empty string "".
+Return results as JSON with a "coaches" key containing an array of objects.
+Each object must have: name, position, email, phone, twitter
+Maximum 15 coaches."""
 
-Return your results as a JSON object with a "coaches" key containing an array of objects.
-Each object must have these exact keys: name, position, email, phone, twitter.
-If a field is not found, use an empty string "".
-Maximum 15 coaches (get the full staff if possible)."""
+        user_message = f"""Visit this coaching staff directory URL and extract all visible contact information: {source_url}
 
-        user_message = f"""Source URL: {source_url}
-
-HTML Content:
-{html[:100000]}"""  # Further truncate for the prompt
+Extract the name, position, and any contact details (email, phone, Twitter) shown for each coach on the page."""
 
         try:
             response = self.client.chat.completions.create(
@@ -131,34 +97,29 @@ HTML Content:
                     {"role": "system", "content": system_message},
                     {"role": "user", "content": user_message}
                 ],
+                tools=[{"type": "web_search"}],  # Enable web search to visit URL
                 response_format={"type": "json_object"},
-                temperature=0.1  # Low temperature for accurate extraction
+                temperature=0.1
             )
             
             result = response.choices[0].message.content.strip()
             
             # Remove markdown code blocks if present
             if result.startswith("```json"):
-                result = result[7:]  # Remove ```json
+                result = result[7:]
             if result.startswith("```"):
-                result = result[3:]  # Remove ```
+                result = result[3:]
             if result.endswith("```"):
-                result = result[:-3]  # Remove closing ```
+                result = result[:-3]
             result = result.strip()
             
             # Parse JSON response
             try:
                 parsed = json.loads(result)
                 
-                # Extract coaches array from JSON object
+                # Extract coaches array
                 if isinstance(parsed, dict):
-                    if 'coaches' in parsed:
-                        coaches = parsed['coaches']
-                    elif 'data' in parsed:
-                        coaches = parsed['data']
-                    else:
-                        # Try to find any array value
-                        coaches = next((v for v in parsed.values() if isinstance(v, list)), [])
+                    coaches = parsed.get('coaches', parsed.get('data', []))
                 elif isinstance(parsed, list):
                     coaches = parsed
                 else:
@@ -166,14 +127,13 @@ HTML Content:
                 
                 # Validate and clean coach data
                 validated_coaches = []
-                for coach in coaches[:15]:  # CHANGED: Now limit to 15 (was 10)
+                for coach in coaches[:15]:
                     if isinstance(coach, dict):
-                        # NEW: Added phone field
                         validated = {
                             'name': str(coach.get('name', '')).strip(),
                             'position': str(coach.get('position', '')).strip(),
                             'email': str(coach.get('email', '')).strip(),
-                            'phone': str(coach.get('phone', '')).strip(),  # NEW FIELD
+                            'phone': str(coach.get('phone', '')).strip(),
                             'twitter': str(coach.get('twitter', '')).strip(),
                             'source_url': source_url
                         }
@@ -188,39 +148,11 @@ HTML Content:
                                 logger.debug(f"Filtered out non-coach: {validated['name']} - {validated['position']}")
                 
                 logger.info(f"Extraction Agent: Validated {len(validated_coaches)} coaches")
-                return validated_coaches  # CHANGED: No longer limit to [:10] here
+                return validated_coaches
                 
             except json.JSONDecodeError as e:
                 logger.error(f"Extraction Agent: Failed to parse JSON response: {str(e)}")
                 logger.debug(f"Response content: {result}")
-                # Try to extract JSON from markdown code blocks if present
-                if "```json" in result:
-                    json_start = result.find("```json") + 7
-                    json_end = result.find("```", json_start)
-                    if json_end > json_start:
-                        try:
-                            parsed = json.loads(result[json_start:json_end].strip())
-                            if isinstance(parsed, dict) and 'coaches' in parsed:
-                                coaches = parsed['coaches']
-                                # Re-process with same validation logic
-                                validated_coaches = []
-                                for coach in coaches[:15]:  # CHANGED: 15 instead of 10
-                                    if isinstance(coach, dict):
-                                        validated = {
-                                            'name': str(coach.get('name', '')).strip(),
-                                            'position': str(coach.get('position', '')).strip(),
-                                            'email': str(coach.get('email', '')).strip(),
-                                            'phone': str(coach.get('phone', '')).strip(),  # NEW
-                                            'twitter': str(coach.get('twitter', '')).strip(),
-                                            'source_url': source_url
-                                        }
-                                        if validated['name'] and validated['position']:
-                                            position_lower = validated['position'].lower()
-                                            if any(keyword in position_lower for keyword in ['coach', 'head', 'assistant', 'associate', 'director', 'coordinator']):
-                                                validated_coaches.append(validated)
-                                return validated_coaches
-                        except json.JSONDecodeError:
-                            pass
                 return []
                 
         except AuthenticationError as e:
@@ -246,39 +178,30 @@ HTML Content:
         """
         Extract coach data from multiple directory URLs.
         
-        CHANGED: Now tries each URL until we get good results (since we expect directory pages
-        to have most/all coaches on one page). Stops after finding 10+ coaches or trying all URLs.
+        Stops after finding 10+ coaches or trying all URLs.
         
         Args:
             urls: List of directory URLs to extract from
         
         Returns:
-            Combined list of all coaches found
-        
-        Raises:
-            SystemExit: If OpenAI API is not configured or tokens are exhausted
+            Combined list of all coaches found (max 15)
         """
         all_coaches = []
         
         for url in urls:
-            # API errors will be caught and exit in extract_from_url
-            # Only catch non-API errors here (e.g., network issues for specific URLs)
             try:
                 coaches = await self.extract_from_url(url)
                 all_coaches.extend(coaches)
                 
-                # CHANGED: Stop if we have 10+ coaches (directory pages should have most staff)
+                # Stop if we have 10+ coaches
                 if len(all_coaches) >= 10:
                     logger.info(f"Extraction Agent: Found {len(all_coaches)} coaches, stopping extraction")
                     break
                     
             except (AuthenticationError, RateLimitError, APIError):
-                # Re-raise API errors - they will be handled in extract_from_url
                 raise
             except Exception as e:
-                # Log non-API errors for specific URLs but continue with other URLs
                 logger.warning(f"Extraction Agent: Error extracting from {url}: {str(e)}")
                 continue
         
-        # CHANGED: Return up to 15 coaches (was 10)
         return all_coaches[:15]
