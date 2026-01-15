@@ -27,13 +27,13 @@ class DiscoveryAgent:
     - NOW FOCUSES ON DIRECTORY PAGES (not individual coach pages)
     """
     
-    def __init__(self, openai_api_key: str, model_name: str = "gpt-4o-mini-search-preview"):
+    def __init__(self, openai_api_key: str, model_name: str = "gpt-4o-mini"):
         """
         Initialize the Discovery Agent.
         
         Args:
             openai_api_key: OpenAI API key
-            model_name: OpenAI model name (default: gpt-4o-mini-search-preview)
+            model_name: OpenAI model name (default: gpt-4o-mini)
         """
         self.client = OpenAI(api_key=openai_api_key)
         self.model_name = model_name
