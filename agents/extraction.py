@@ -1,13 +1,14 @@
 """
 Extraction Agent - Extracts raw coach data from directory pages using web_search.
 
-This agent uses OpenAI's web_search tool to visit and analyze directory pages directly,
+This agent uses OpenAI's Responses API with web_search to visit and analyze directory pages,
 eliminating HTML parsing issues and hallucinations.
 """
 
 import json
 import logging
 import sys
+import re
 from typing import List, Dict
 from openai import OpenAI
 from openai import AuthenticationError, RateLimitError, APIError
@@ -20,7 +21,7 @@ class ExtractionAgent:
     Extraction Agent extracts coach data by visiting directory pages with web_search.
     
     Process:
-    - Uses OpenAI web_search to visit and analyze directory URLs
+    - Uses OpenAI Responses API with web_search to visit and analyze directory URLs
     - Extracts structured coach information from visible page content
     - Grabs all visible contact info (email, phone, Twitter, etc.)
     - Returns up to 15 coaches per URL
@@ -32,7 +33,7 @@ class ExtractionAgent:
         
         Args:
             openai_api_key: OpenAI API key
-            model_name: OpenAI model name with search capability
+            model_name: OpenAI model name
         """
         self.client = OpenAI(api_key=openai_api_key)
         self.model_name = model_name
@@ -49,16 +50,16 @@ class ExtractionAgent:
         """
         logger.info(f"Extraction Agent: Analyzing {url}")
         
-        # Extract using OpenAI web_search
-        coaches = await self._extract_with_websearch(url)
+        # Extract using OpenAI Responses API with web_search
+        coaches = await self._extract_with_responses_api(url)
         
         logger.info(f"Extraction Agent: Extracted {len(coaches)} coaches from {url}")
         
         return coaches
     
-    async def _extract_with_websearch(self, source_url: str) -> List[Dict[str, str]]:
+    async def _extract_with_responses_api(self, source_url: str) -> List[Dict[str, str]]:
         """
-        Use OpenAI web_search to visit and extract coach data from directory page.
+        Use OpenAI Responses API with web_search to visit and extract coach data.
         
         Args:
             source_url: URL to visit and extract from
@@ -66,94 +67,54 @@ class ExtractionAgent:
         Returns:
             List of coach dictionaries
         """
-        system_message = """You are a data extraction assistant specializing in coaching staff directories.
+        input_text = f"""Visit this coaching staff directory URL: {source_url}
 
-CRITICAL INSTRUCTIONS:
-1. Visit the provided URL and extract ALL coaches listed on the page
-2. For each coach, extract ONLY information that is EXPLICITLY visible:
-   - Full name (exactly as shown)
-   - Position/title (exactly as shown)
-   - Email address (ONLY if displayed on the page)
-   - Phone number (ONLY if displayed on the page)
-   - Twitter/social media handle or URL (ONLY if displayed on the page)
-3. Do NOT guess, infer, or make up any information
-4. Include all coaching positions: Head Coach, Assistant Coach, Associate Coach, Coordinator, Director, etc.
-5. EXCLUDE: trainers, medical staff, equipment managers, non-coaching staff
+Extract ALL coaches listed on the page with their contact information:
 
-If a field is not visible on the page, use an empty string "".
+For each coach, extract ONLY what is EXPLICITLY visible on the page:
+- Full name (exactly as shown)
+- Position/title (exactly as shown)  
+- Email address (ONLY if displayed)
+- Phone number (ONLY if displayed)
+- Twitter/social media handle or URL (ONLY if displayed)
 
-Return results as JSON with a "coaches" key containing an array of objects.
-Each object must have: name, position, email, phone, twitter
-Maximum 15 coaches."""
+CRITICAL RULES:
+- Do NOT guess or infer any information
+- Include all coaching positions: Head Coach, Assistant Coach, Associate Coach, Coordinator, Director, etc.
+- EXCLUDE: trainers, medical staff, equipment managers, non-coaching staff
+- If a field is not visible, leave it empty
 
-        user_message = f"""Visit this coaching staff directory URL and extract all visible contact information: {source_url}
+Return the data in this EXACT format for each coach (one per line):
+NAME: [full name]
+POSITION: [position/title]
+EMAIL: [email or empty]
+PHONE: [phone or empty]
+TWITTER: [twitter or empty]
+---
 
-Extract the name, position, and any contact details (email, phone, Twitter) shown for each coach on the page."""
+List all coaches found (up to 15 maximum)."""
 
         try:
-            response = self.client.chat.completions.create(
+            response = self.client.responses.create(
                 model=self.model_name,
-                messages=[
-                    {"role": "system", "content": system_message},
-                    {"role": "user", "content": user_message}
-                ],
-                tools=[{"type": "web_search"}],  # Enable web search to visit URL
-                response_format={"type": "json_object"},
-                temperature=0.1
+                tools=[{"type": "web_search"}],
+                input=input_text
             )
             
-            result = response.choices[0].message.content.strip()
+            # Extract text from response
+            result_text = ""
+            if hasattr(response, 'output_text') and response.output_text:
+                result_text = response.output_text.strip()
             
-            # Remove markdown code blocks if present
-            if result.startswith("```json"):
-                result = result[7:]
-            if result.startswith("```"):
-                result = result[3:]
-            if result.endswith("```"):
-                result = result[:-3]
-            result = result.strip()
-            
-            # Parse JSON response
-            try:
-                parsed = json.loads(result)
-                
-                # Extract coaches array
-                if isinstance(parsed, dict):
-                    coaches = parsed.get('coaches', parsed.get('data', []))
-                elif isinstance(parsed, list):
-                    coaches = parsed
-                else:
-                    coaches = []
-                
-                # Validate and clean coach data
-                validated_coaches = []
-                for coach in coaches[:15]:
-                    if isinstance(coach, dict):
-                        validated = {
-                            'name': str(coach.get('name', '')).strip(),
-                            'position': str(coach.get('position', '')).strip(),
-                            'email': str(coach.get('email', '')).strip(),
-                            'phone': str(coach.get('phone', '')).strip(),
-                            'twitter': str(coach.get('twitter', '')).strip(),
-                            'source_url': source_url
-                        }
-                        
-                        # Only include if name and position are present
-                        if validated['name'] and validated['position']:
-                            # Filter out non-coaching staff
-                            position_lower = validated['position'].lower()
-                            if any(keyword in position_lower for keyword in ['coach', 'head', 'assistant', 'associate', 'director', 'coordinator']):
-                                validated_coaches.append(validated)
-                            else:
-                                logger.debug(f"Filtered out non-coach: {validated['name']} - {validated['position']}")
-                
-                logger.info(f"Extraction Agent: Validated {len(validated_coaches)} coaches")
-                return validated_coaches
-                
-            except json.JSONDecodeError as e:
-                logger.error(f"Extraction Agent: Failed to parse JSON response: {str(e)}")
-                logger.debug(f"Response content: {result}")
+            if not result_text:
+                logger.warning("Extraction Agent: No output from Responses API")
                 return []
+            
+            # Parse the structured text response
+            coaches = self._parse_structured_response(result_text, source_url)
+            
+            logger.info(f"Extraction Agent: Parsed {len(coaches)} coaches from response")
+            return coaches
                 
         except AuthenticationError as e:
             logger.error("ERROR: OpenAI API key is invalid or not configured.")
@@ -173,6 +134,66 @@ Extract the name, position, and any contact details (email, phone, Twitter) show
             logger.error(f"ERROR: Unexpected error in Extraction Agent: {str(e)}")
             logger.error("Please check your OpenAI API configuration and try again.")
             sys.exit(1)
+    
+    def _parse_structured_response(self, text: str, source_url: str) -> List[Dict[str, str]]:
+        """
+        Parse structured text response into coach dictionaries.
+        
+        Args:
+            text: Response text with coaches in structured format
+            source_url: Source URL for attribution
+        
+        Returns:
+            List of coach dictionaries
+        """
+        coaches = []
+        current_coach = {}
+        
+        # Split by coach separator or double newlines
+        sections = re.split(r'---+|\n\n+', text)
+        
+        for section in sections:
+            lines = section.strip().split('\n')
+            coach_data = {}
+            
+            for line in lines:
+                line = line.strip()
+                if ':' in line:
+                    key, value = line.split(':', 1)
+                    key = key.strip().upper()
+                    value = value.strip()
+                    
+                    if key == 'NAME':
+                        coach_data['name'] = value
+                    elif key == 'POSITION':
+                        coach_data['position'] = value
+                    elif key == 'EMAIL':
+                        coach_data['email'] = value
+                    elif key == 'PHONE':
+                        coach_data['phone'] = value
+                    elif key == 'TWITTER':
+                        coach_data['twitter'] = value
+            
+            # Validate and add coach if has name and position
+            if coach_data.get('name') and coach_data.get('position'):
+                validated = {
+                    'name': coach_data.get('name', '').strip(),
+                    'position': coach_data.get('position', '').strip(),
+                    'email': coach_data.get('email', '').strip(),
+                    'phone': coach_data.get('phone', '').strip(),
+                    'twitter': coach_data.get('twitter', '').strip(),
+                    'source_url': source_url
+                }
+                
+                # Filter out non-coaching staff
+                position_lower = validated['position'].lower()
+                if any(keyword in position_lower for keyword in ['coach', 'head', 'assistant', 'associate', 'director', 'coordinator']):
+                    coaches.append(validated)
+                    
+                    if len(coaches) >= 15:
+                        break
+        
+        return coaches
     
     async def extract_from_multiple_urls(self, urls: List[str]) -> List[Dict[str, str]]:
         """
