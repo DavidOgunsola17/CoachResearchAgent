@@ -67,32 +67,42 @@ class ExtractionAgent:
         Returns:
             List of coach dictionaries
         """
-        input_text = f"""Visit this coaching staff directory URL: {source_url}
+        input_text = f"""Visit the following coaching staff directory URL and extract all coaching staff into a structured JSON array: {source_url}
 
-Extract ALL coaches listed on the page with their contact information:
+**Instructions:**
+1.  **Extract all coaches**: Identify every person listed with a coaching title (e.g., Head Coach, Assistant Coach, Director of Operations).
+2.  **Required Fields**: For each coach, extract the following information, ensuring it is explicitly visible on the page:
+    *   `name`: The coach's full name.
+    *   `position`: Their official title.
+    *   `email`: Their email address.
+    *   `phone`: Their phone number.
+    *   `twitter`: Their Twitter handle (e.g., `@handle`) or URL.
+3.  **JSON Format**: Return the data as a single JSON array of objects. Each object should represent one coach.
+4.  **Handling Missing Data**: If a piece of information (email, phone, twitter) is not available for a coach, set the corresponding JSON value to `null` or an empty string.
+5.  **Exclusions**: Do not include non-coaching staff like medical trainers or administrative assistants unless they hold a clear operational title (e.g., "Director of Football Operations").
 
-For each coach, extract ONLY what is EXPLICITLY visible on the page:
-- Full name (exactly as shown)
-- Position/title (exactly as shown)  
-- Email address (ONLY if displayed)
-- Phone number (ONLY if displayed)
-- Twitter/social media handle or URL (ONLY if displayed)
+**Example JSON Output:**
+```json
+[
+  {{
+    "name": "John Doe",
+    "position": "Head Coach",
+    "email": "johndoe@example.com",
+    "phone": "123-456-7890",
+    "twitter": "@johndoe"
+  }},
+  {{
+    "name": "Jane Smith",
+    "position": "Assistant Coach",
+    "email": "janesmith@example.com",
+    "phone": null,
+    "twitter": "https://twitter.com/janesmith"
+  }}
+]
+```
 
-CRITICAL RULES:
-- Do NOT guess or infer any information
-- Include all coaching positions: Head Coach, Assistant Coach, Associate Coach, Coordinator, Director, etc.
-- EXCLUDE: trainers, medical staff, equipment managers, non-coaching staff
-- If a field is not visible, leave it empty
-
-Return the data in this EXACT format for each coach (one per line):
-NAME: [full name]
-POSITION: [position/title]
-EMAIL: [email or empty]
-PHONE: [phone or empty]
-TWITTER: [twitter or empty]
----
-
-List all coaches found (up to 15 maximum)."""
+Return **only** the JSON data, enclosed in a markdown code block if necessary.
+"""
 
         try:
             response = self.client.responses.create(
@@ -113,8 +123,11 @@ List all coaches found (up to 15 maximum)."""
             # Parse the structured text response
             coaches = self._parse_structured_response(result_text, source_url)
             
-            logger.info(f"Extraction Agent: Parsed {len(coaches)} coaches from response")
-            return coaches
+            # Validate and supplement contact info using regex
+            validated_coaches = self._validate_contact_info(coaches, result_text)
+
+            logger.info(f"Extraction Agent: Parsed and validated {len(validated_coaches)} coaches from response")
+            return validated_coaches
                 
         except AuthenticationError as e:
             logger.error("ERROR: OpenAI API key is invalid or not configured.")
@@ -137,27 +150,51 @@ List all coaches found (up to 15 maximum)."""
     
     def _parse_structured_response(self, text: str, source_url: str) -> List[Dict[str, str]]:
         """
-        Parse structured text response into coach dictionaries.
+        Parse the response, prioritizing JSON and falling back to legacy text parsing.
+        """
+        # Attempt to parse as JSON first
+        try:
+            # Clean up potential markdown code blocks
+            if text.strip().startswith("```json"):
+                text = text.strip()[7:-4].strip()
+
+            coaches_data = json.loads(text)
+
+            if isinstance(coaches_data, list):
+                # Add source_url and validate
+                validated_coaches = []
+                for coach in coaches_data:
+                    if isinstance(coach, dict) and coach.get('name') and coach.get('position'):
+                        # Ensure all keys are present
+                        validated_coach = {
+                            'name': coach.get('name', ''),
+                            'position': coach.get('position', ''),
+                            'email': coach.get('email', ''),
+                            'phone': coach.get('phone', ''),
+                            'twitter': coach.get('twitter', ''),
+                            'source_url': source_url
+                        }
+                        validated_coaches.append(validated_coach)
+                logger.info(f"Successfully parsed JSON response with {len(validated_coaches)} coaches.")
+                return validated_coaches
+        except json.JSONDecodeError:
+            logger.warning("JSON parsing failed. Falling back to legacy text parsing.")
+            # Fallback to legacy parsing if JSON fails
+            return self._parse_legacy_text_response(text, source_url)
         
-        Args:
-            text: Response text with coaches in structured format
-            source_url: Source URL for attribution
-        
-        Returns:
-            List of coach dictionaries
+        return []
+
+    def _parse_legacy_text_response(self, text: str, source_url: str) -> List[Dict[str, str]]:
+        """
+        Legacy parser for the old text-based format.
         """
         coaches = []
-        current_coach = {}
-        
-        # Split by coach separator or double newlines
         sections = re.split(r'---+|\n\n+', text)
         
         for section in sections:
-            lines = section.strip().split('\n')
             coach_data = {}
-            
+            lines = section.strip().split('\n')
             for line in lines:
-                line = line.strip()
                 if ':' in line:
                     key, value = line.split(':', 1)
                     key = key.strip().upper()
@@ -174,27 +211,67 @@ List all coaches found (up to 15 maximum)."""
                     elif key == 'TWITTER':
                         coach_data['twitter'] = value
             
-            # Validate and add coach if has name and position
             if coach_data.get('name') and coach_data.get('position'):
-                validated = {
-                    'name': coach_data.get('name', '').strip(),
-                    'position': coach_data.get('position', '').strip(),
-                    'email': coach_data.get('email', '').strip(),
-                    'phone': coach_data.get('phone', '').strip(),
-                    'twitter': coach_data.get('twitter', '').strip(),
-                    'source_url': source_url
-                }
-                
-                # Filter out non-coaching staff
-                position_lower = validated['position'].lower()
-                if any(keyword in position_lower for keyword in ['coach', 'head', 'assistant', 'associate', 'director', 'coordinator']):
-                    coaches.append(validated)
-                    
-                    if len(coaches) >= 15:
-                        break
+                coach_data['source_url'] = source_url
+                coaches.append(coach_data)
         
         return coaches
     
+    def _validate_contact_info(self, coaches: List[Dict[str, str]], text: str) -> List[Dict[str, str]]:
+        """
+        Use regex to validate and supplement contact info missed by the LLM.
+        This version uses a safer approach for associating phone numbers.
+        """
+        # Regex patterns
+        email_pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
+        # Per user spec + review feedback: optional country code, flexible area code parens
+        phone_pattern = r'(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}'
+        twitter_pattern = r'@\w+|twitter\.com/\w+'
+
+        # Find all potential contacts just once
+        all_emails = re.findall(email_pattern, text)
+        all_twitters = re.findall(twitter_pattern, text, re.IGNORECASE)
+
+        for coach in coaches:
+            coach_name = coach.get('name')
+            if not coach_name:
+                continue
+
+            last_name = coach_name.split(' ')[-1].lower()
+
+            # If email is missing or invalid, try to find a plausible match
+            if not coach.get('email') or '@' not in coach.get('email', ''):
+                for email in all_emails:
+                    if last_name in email.split('@')[0].lower():
+                        coach['email'] = email
+                        all_emails.remove(email) # Prevent re-assignment
+                        break
+
+            # If twitter is missing, try to find a plausible match
+            if not coach.get('twitter'):
+                for twitter in all_twitters:
+                    if last_name in twitter.lower():
+                        coach['twitter'] = twitter
+                        all_twitters.remove(twitter) # Prevent re-assignment
+                        break
+
+            # If phone is missing, search for it near the coach's name in the text
+            if not coach.get('phone'):
+                try:
+                    # Find the coach's name and search in a window after it
+                    name_match = re.search(re.escape(coach_name), text, re.IGNORECASE)
+                    if name_match:
+                        # Search in a 150 character window after the name
+                        start = name_match.end()
+                        search_window = text[start : start + 150]
+                        phone_match = re.search(phone_pattern, search_window)
+                        if phone_match:
+                            coach['phone'] = phone_match.group(0).strip()
+                except re.error:
+                    logger.debug(f"Could not perform regex search for phone number for {coach_name}")
+
+        return coaches
+
     async def extract_from_multiple_urls(self, urls: List[str]) -> List[Dict[str, str]]:
         """
         Extract coach data from multiple directory URLs.

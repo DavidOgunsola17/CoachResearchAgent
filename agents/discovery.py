@@ -10,6 +10,7 @@ import logging
 import re
 import sys
 from typing import List
+from urllib.parse import urlparse
 from openai import OpenAI
 from openai import AuthenticationError, RateLimitError, APIError
 
@@ -102,26 +103,28 @@ class DiscoveryAgent:
             List of prioritized directory URLs
         """
         # NEW PROMPT: Focus on directory pages with all coaches listed
-        input_text = f"""Find the main coaching staff directory page for {school_name} {sport}.
+        sport_keywords = sport.lower().replace(" ", "-")
+        input_text = f"""Please find the specific coaching staff directory for {school_name}'s {sport} team.
+
+I need URLs that are highly specific to the coaching staff for this sport. The best URLs will contain sport-specific identifiers in their path.
 
 Requirements:
-1. ONE page that lists ALL coaches in a directory/roster format (not individual bio pages)
-2. Official athletics website (.edu domain strongly preferred)
-3. Page should show: names, titles, and contact information (emails, phone, Twitter, etc.)
-4. NOT individual coach bio pages (URLs should NOT have coach names in them)
-5. NOT social media, news articles, or third-party sites
+1.  **Sport-Specific Directory**: The page must be the official coaching staff directory for {sport}. Avoid general athletic staff directories if a sport-specific one exists.
+2.  **URL Path**: The URL path should ideally contain sport identifiers like `/{sport_keywords}/`, `/wsoc/`, `/womens-soccer/`, `/staff`, or `/coaches`.
+3.  **Content**: The page should list multiple coaches with their names, titles, and contact information (email, phone, etc.).
+4.  **Exclusions**: Do NOT return individual coach bio pages, general athletic homepages, social media links, or news articles.
 
-Good examples of directory pages:
-- goduke.com/sports/football/coaches (lists all coaches)
-- ohiostatebuckeyes.com/sports/m-baskbl/staff (staff directory)
-- gostanford.com/sports/wsoc/coaches (coaching staff page)
+**Good URL Examples (for Women's Soccer):**
+- `seminoles.com/sports/womens-soccer/coaches/`
+- `goheels.com/sports/womens-soccer/staff`
+- `goducks.com/sports/wsoc/coaches`
 
-Bad examples (individual pages):
-- goduke.com/sports/football/roster/coaches/mike-elko/4315 (one coach only)
-- twitter.com/DukeFOOTBALL (social media)
-- espn.com/college-football/story (news article)
+**Bad URL Examples:**
+- `seminoles.com/staff` (too general)
+- `goheels.com/sports/` (not a directory)
+- `goducks.com/sports/womens-soccer/roster` (roster, not coaches)
 
-Return 3-5 directory page URLs, most relevant first. URLs only, one per line.
+Return 3-5 of the most accurate and specific URLs you can find, one per line.
 """
 
         try:
@@ -132,62 +135,48 @@ Return 3-5 directory page URLs, most relevant first. URLs only, one per line.
                 input=input_text
             )
             
-            # Extract URLs from response
+            # Layer 1: Prioritize structured URL annotations
             urls = []
-            
-            # Parse output_items to find message items with annotations
-            # The OpenAI SDK returns objects with attributes
             if hasattr(response, 'output_items') and response.output_items:
                 for item in response.output_items:
-                    # Access attributes (OpenAI SDK returns objects, not dicts)
-                    if hasattr(item, 'type') and item.type == 'message':
-                        if hasattr(item, 'status') and item.status == 'completed':
-                            if hasattr(item, 'content') and item.content:
-                                for content_item in item.content:
-                                    if hasattr(content_item, 'type') and content_item.type == 'output_text':
-                                        if hasattr(content_item, 'annotations') and content_item.annotations:
-                                            for annotation in content_item.annotations:
-                                                if hasattr(annotation, 'type') and annotation.type == 'url_citation':
-                                                    if hasattr(annotation, 'url') and annotation.url:
-                                                        urls.append(annotation.url)
+                    if hasattr(item, 'type') and item.type == 'message' and hasattr(item, 'status') and item.status == 'completed':
+                        if hasattr(item, 'content') and item.content:
+                            for content_item in item.content:
+                                if hasattr(content_item, 'type') and content_item.type == 'output_text':
+                                    if hasattr(content_item, 'annotations') and content_item.annotations:
+                                        for annotation in content_item.annotations:
+                                            if hasattr(annotation, 'type') and annotation.type == 'url_citation' and hasattr(annotation, 'url') and annotation.url:
+                                                urls.append(annotation.url)
             
-            # Also try to extract URLs from the output_text if annotations weren't found
-            if not urls and hasattr(response, 'output_text') and response.output_text:
-                result_text = response.output_text.strip()
-                # Parse URLs from response text
-                for line in result_text.split('\n'):
-                    line = line.strip()
-                    # Extract URLs (handle various formats)
-                    if line.startswith('http'):
-                        url = line.rstrip('.,;:)').split()[0]  # Take first word if multiple
-                        if url.startswith('http'):
-                            urls.append(url)
-                    # Also look for URLs embedded in text
-                    elif 'http' in line:
-                        url_matches = re.findall(r'https?://[^\s<>"\']+', line)
-                        urls.extend(url_matches)
+            # If annotations are found, validate and return the best one
+            if urls:
+                logger.debug("Found URLs via annotations. Validating...")
+                validated_url = self._validate_and_select_url(urls, sport)
+                if validated_url:
+                    return [validated_url]
+
+            # Layer 2: Fallback to Regex on output_text for sport-specific patterns
+            output_text = response.output_text.strip() if hasattr(response, 'output_text') and response.output_text else ""
+            if output_text:
+                sport_regex = r'https?://[^\s<>"\']*/(?:' + '|'.join(self._get_sport_keywords(sport)) + r')[^\s<>"\']*'
+                regex_urls = re.findall(sport_regex, output_text, re.IGNORECASE)
+                if regex_urls:
+                    logger.debug("Found URLs via sport-specific regex. Validating...")
+                    validated_url = self._validate_and_select_url(regex_urls, sport)
+                    if validated_url:
+                        return [validated_url]
+
+            # Layer 3: Fallback to general URL extraction and filtering
+            if output_text:
+                all_urls = re.findall(r'https?://[^\s<>"\']+', output_text)
+                if all_urls:
+                    logger.debug("Found URLs via general extraction. Filtering and validating...")
+                    validated_url = self._validate_and_select_url(all_urls, sport)
+                    if validated_url:
+                        return [validated_url]
             
-            # Filter and validate URLs
-            validated_urls = []
-            for url in urls:
-                url_lower = url.lower()
-                # Filter out social media and news
-                if not any(site in url_lower for site in ['twitter', 'facebook', 'instagram', 'linkedin', 'youtube', 'news.com', 'article', 'espn.com']):
-                    # NEW: Filter out individual coach pages (URLs with coach names/IDs at end)
-                    # We want directory pages like /coaches or /staff, not /coaches/john-smith/123
-                    if not re.search(r'/coaches/[^/]+/\d+', url_lower) and not re.search(r'/roster/coaches/[^/]+', url_lower):
-                        validated_urls.append(url)
-            
-            # Remove duplicates while preserving order
-            seen = set()
-            unique_urls = []
-            for url in validated_urls:
-                if url not in seen:
-                    seen.add(url)
-                    unique_urls.append(url)
-            
-            logger.debug(f"Discovery Agent: OpenAI returned {len(unique_urls)} validated directory URLs")
-            return unique_urls[:5]  # Return top 5 directory pages (was 15 individual pages)
+            logger.warning("No valid URL found after all fallbacks.")
+            return []
             
         except AuthenticationError:
             # Re-raise authentication errors with context
@@ -202,3 +191,53 @@ Return 3-5 directory page URLs, most relevant first. URLs only, one per line.
             # Wrap other exceptions as API errors
             logger.error(f"Discovery Agent: Error using OpenAI search: {str(e)}")
             raise APIError(f"OpenAI API request failed: {str(e)}") from e
+
+    def _get_sport_keywords(self, sport: str) -> List[str]:
+        """Generate sport-specific keywords for URL matching."""
+        sport = sport.lower()
+        keywords = [sport.replace(" ", "-"), sport.replace(" ", "")]
+        if "women's" in sport:
+            keywords.append("wsoc")
+            keywords.append("w-soccer")
+        if "men's" in sport:
+            keywords.append("msoc")
+            keywords.append("m-soccer")
+        keywords.extend(["staff", "coaches", "directory"])
+        return list(set(keywords))
+
+    def _validate_and_select_url(self, urls: List[str], sport: str) -> str:
+        """Filter URLs and select the best one based on sport-specificity and path length."""
+        valid_urls = []
+        sport_keywords = self._get_sport_keywords(sport)
+
+        for url in urls:
+            url_lower = url.lower()
+            if not any(site in url_lower for site in ['twitter', 'facebook', 'instagram', 'linkedin', 'youtube', 'news', 'article', 'espn']):
+                if not re.search(r'/coaches/[^/]+/\d+', url_lower) and not re.search(r'/roster/coaches/[^/]+', url_lower):
+                    valid_urls.append(url)
+
+        if not valid_urls:
+            return ""
+
+        # Score URLs based on keyword matches and path length
+        best_url = ""
+        max_score = -1
+
+        for url in valid_urls:
+            score = 0
+            path = urlparse(url).path.lower()
+            for keyword in sport_keywords:
+                if keyword in path:
+                    score += 1
+
+            # Tie-breaker: prefer longer paths (more specific)
+            path_length = len(path.split('/'))
+
+            # Combine score and path length for a final score
+            final_score = score * 100 + path_length
+
+            if final_score > max_score:
+                max_score = final_score
+                best_url = url
+
+        return best_url
