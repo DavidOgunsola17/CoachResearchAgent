@@ -210,51 +210,44 @@ Return 3-5 of the most accurate and specific **directory** URLs you can find, on
         return list(set(keywords))
 
     def _validate_and_select_url(self, urls: List[str], sport: str) -> str:
-        """Sanitize, filter, and select the best URL."""
-        valid_urls = []
+        """Sanitize, score, and select the best URL using a penalty-based system."""
         sport_keywords = self._get_sport_keywords(sport)
-
-        for url in urls:
-            # Sanitize URL by removing markdown artifacts
-            sanitized_url = re.sub(r'\]\([^)]+\)$', '', url)
-            url_lower = sanitized_url.lower()
-
-            # Stricter filtering logic
-            is_social = any(site in url_lower for site in ['twitter', 'facebook', 'instagram', 'linkedin', 'youtube'])
-            is_news = any(keyword in url_lower for keyword in ['news', 'article', 'espn'])
-            is_roster = '/roster' in url_lower
-            # Matches patterns like /staff-directory/john-doe/123 - a common individual bio page format
-            is_individual_bio = re.search(r'/(?:staff|directory)/[^/]+/\d+', url_lower)
-
-            if not any([is_social, is_news, is_roster, is_individual_bio]):
-                valid_urls.append(sanitized_url)
-
-        if not valid_urls:
-            return ""
-
-        # Score URLs based on keyword matches and path length
         best_url = ""
-        max_score = -1
+        max_score = -1000  # Start with a very low score
 
-        for url in valid_urls:
+        sanitized_urls = [re.sub(r'\]\([^)]+\)$', '', url) for url in urls]
+
+        for url in sanitized_urls:
             score = 0
+            url_lower = url.lower()
             path = urlparse(url).path.lower()
 
-            # Higher score for explicit "coach" or "staff" keywords
-            if any(k in path for k in ['coach', 'staff']):
-                score += 10
-
-            # Score for sport-specific keywords
+            # Positive points for good keywords
+            if any(k in path for k in ['coach', 'staff', 'directory']):
+                score += 50
             for keyword in sport_keywords:
                 if keyword in path:
-                    score += 1
+                    score += 20
 
-            # Tie-breaker: prefer longer paths (more specific)
+            # Negative points for problematic patterns
+            if '/roster' in path:
+                score -= 100  # Heavy penalty for "roster"
+            if re.search(r'/(?:staff|directory)/[^/]+/\d+', path):
+                score -= 75  # Penalty for individual bio patterns
+            if any(site in url_lower for site in ['news', 'article', 'espn']):
+                score -= 150 # Heavy penalty for news sites
+
+            # Tie-breaker using path length
             path_length = len(path.split('/'))
-            final_score = score * 100 + path_length
+            final_score = score + path_length
 
             if final_score > max_score:
                 max_score = final_score
                 best_url = url
 
-        return best_url
+        # Only return a URL if it has a non-negative score
+        if max_score >= 0:
+            return best_url
+        else:
+            logger.warning(f"No suitable URL found for {sport}. Best score was {max_score}, which is below the threshold.")
+            return ""
