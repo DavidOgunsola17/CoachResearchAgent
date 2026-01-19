@@ -102,29 +102,33 @@ class DiscoveryAgent:
         Returns:
             List of prioritized directory URLs
         """
-        # NEW PROMPT: Focus on directory pages with all coaches listed
+        # REVISED PROMPT: More forceful exclusion of incorrect page types
         sport_keywords = sport.lower().replace(" ", "-")
-        input_text = f"""Please find the specific coaching staff directory for {school_name}'s {sport} team.
+        input_text = f"""Please find the main coaching staff directory page for {school_name}'s {sport} team.
 
-I need URLs that are highly specific to the coaching staff for this sport. The best URLs will contain sport-specific identifiers in their path.
+The page must be a **directory or list of multiple coaches**, not a player roster or a single coach's biography.
 
-Requirements:
-1.  **Sport-Specific Directory**: The page must be the official coaching staff directory for {sport}. Avoid general athletic staff directories if a sport-specific one exists.
-2.  **URL Path**: The URL path should ideally contain sport identifiers like `/{sport_keywords}/`, `/wsoc/`, `/womens-soccer/`, `/staff`, or `/coaches`.
-3.  **Content**: The page should list multiple coaches with their names, titles, and contact information (email, phone, etc.).
-4.  **Exclusions**: Do NOT return individual coach bio pages, general athletic homepages, social media links, or news articles.
+**Key Requirements:**
+1.  **Coaching Staff Directory**: The URL must lead to a single page listing the coaching staff for **{sport}**.
+2.  **Sport-Specific URL**: The URL path should contain sport identifiers (e.g., `/{sport_keywords}/`, `/mens-lacrosse/`, `/football/`, `/coaches`, `/staff`).
+3.  **Content**: The page must display names and titles for multiple coaches.
 
-**Good URL Examples (for Women's Soccer):**
-- `seminoles.com/sports/womens-soccer/coaches/`
-- `goheels.com/sports/womens-soccer/staff`
-- `goducks.com/sports/wsoc/coaches`
+**CRITICAL EXCLUSIONS - DO NOT RETURN THESE:**
+- **NO Player Rosters**: Do not return URLs with `/roster` in the path. These list players, not coaches.
+- **NO Individual Bio Pages**: Do not return URLs for a single person (e.g., `/staff/john-doe`). The page must be a directory.
+- **NO General Directories**: Avoid top-level staff directories if a sport-specific one is available.
 
-**Bad URL Examples:**
-- `seminoles.com/staff` (too general)
-- `goheels.com/sports/` (not a directory)
-- `goducks.com/sports/womens-soccer/roster` (roster, not coaches)
+**Good URL Examples:**
+- `uclabruins.com/sports/mens-basketball/coaches`
+- `ferrisstatebulldogs.com/sports/football/coaches`
+- `athletics.amherst.edu/sports/mens-lacrosse/coaching-staff`
 
-Return 3-5 of the most accurate and specific URLs you can find, one per line.
+**Bad URL Examples to AVOID:**
+- `ferrisstatebulldogs.com/sports/football/roster` (**INCORRECT**: This is a player roster)
+- `athletics.amherst.edu/staff-directory/sam-horning/312` (**INCORRECT**: This is a single coach's bio)
+- `seminoles.com/staff` (**INCORRECT**: Too general, not sport-specific)
+
+Return 3-5 of the most accurate and specific **directory** URLs you can find, one per line.
 """
 
         try:
@@ -206,15 +210,24 @@ Return 3-5 of the most accurate and specific URLs you can find, one per line.
         return list(set(keywords))
 
     def _validate_and_select_url(self, urls: List[str], sport: str) -> str:
-        """Filter URLs and select the best one based on sport-specificity and path length."""
+        """Sanitize, filter, and select the best URL."""
         valid_urls = []
         sport_keywords = self._get_sport_keywords(sport)
 
         for url in urls:
-            url_lower = url.lower()
-            if not any(site in url_lower for site in ['twitter', 'facebook', 'instagram', 'linkedin', 'youtube', 'news', 'article', 'espn']):
-                if not re.search(r'/coaches/[^/]+/\d+', url_lower) and not re.search(r'/roster/coaches/[^/]+', url_lower):
-                    valid_urls.append(url)
+            # Sanitize URL by removing markdown artifacts
+            sanitized_url = re.sub(r'\]\([^)]+\)$', '', url)
+            url_lower = sanitized_url.lower()
+
+            # Stricter filtering logic
+            is_social = any(site in url_lower for site in ['twitter', 'facebook', 'instagram', 'linkedin', 'youtube'])
+            is_news = any(keyword in url_lower for keyword in ['news', 'article', 'espn'])
+            is_roster = '/roster' in url_lower
+            # Matches patterns like /staff-directory/john-doe/123 - a common individual bio page format
+            is_individual_bio = re.search(r'/(?:staff|directory)/[^/]+/\d+', url_lower)
+
+            if not any([is_social, is_news, is_roster, is_individual_bio]):
+                valid_urls.append(sanitized_url)
 
         if not valid_urls:
             return ""
@@ -226,14 +239,18 @@ Return 3-5 of the most accurate and specific URLs you can find, one per line.
         for url in valid_urls:
             score = 0
             path = urlparse(url).path.lower()
+
+            # Higher score for explicit "coach" or "staff" keywords
+            if any(k in path for k in ['coach', 'staff']):
+                score += 10
+
+            # Score for sport-specific keywords
             for keyword in sport_keywords:
                 if keyword in path:
                     score += 1
 
             # Tie-breaker: prefer longer paths (more specific)
             path_length = len(path.split('/'))
-
-            # Combine score and path length for a final score
             final_score = score * 100 + path_length
 
             if final_score > max_score:
