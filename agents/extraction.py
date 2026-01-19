@@ -70,20 +70,16 @@ class ExtractionAgent:
         input_text = f"""Visit the following coaching staff directory URL and extract all coaching staff into a structured JSON array: {source_url}
 
 **Instructions:**
-1.  **Parse Visible Staff Listings**: Scan the page for explicit staff listings. Treat each person in a table row or a list as a separate entry.
+1.  **Extract all coaches**: Identify every person listed with a coaching title (e.g., Head Coach, Assistant Coach, Director of Operations).
 2.  **Required Fields**: For each coach, extract the following information, ensuring it is explicitly visible on the page:
     *   `name`: The coach's full name.
     *   `position`: Their official title.
     *   `email`: Their email address.
     *   `phone`: Their phone number.
     *   `twitter`: Their Twitter handle (e.g., `@handle`) or URL.
-3.  **Literal Extraction**: Extract ONLY the text that is clearly visible. Do not infer or guess information.
-4.  **JSON Format**: Return the data as a single JSON array of objects. Each object should represent one coach.
-5.  **Handling Missing Data**: If a piece of information is not available for a coach, set the corresponding JSON value to `null` or an empty string.
-
-**CRITICAL EXCLUSIONS:**
-- **Ignore UI Elements**: Do NOT extract text from filter dropdowns, search bars, or category headers that are not part of a specific coach's entry.
-- **Ignore Non-Coaching Staff**: Do not include medical trainers or administrative assistants unless they hold a clear operational title.
+3.  **JSON Format**: Return the data as a single JSON array of objects. Each object should represent one coach.
+4.  **Handling Missing Data**: If a piece of information (email, phone, twitter) is not available for a coach, set the corresponding JSON value to `null` or an empty string.
+5.  **Exclusions**: Do not include non-coaching staff like medical trainers or administrative assistants unless they hold a clear operational title (e.g., "Director of Football Operations").
 
 **Example JSON Output:**
 ```json
@@ -265,9 +261,9 @@ Return **only** the JSON data, enclosed in a markdown code block if necessary.
                     # Find the coach's name and search in a window after it
                     name_match = re.search(re.escape(coach_name), text, re.IGNORECASE)
                     if name_match:
-                        # Widen the search window to 250 characters for better association
+                        # Search in a 150 character window after the name
                         start = name_match.end()
-                        search_window = text[start : start + 250]
+                        search_window = text[start : start + 150]
                         phone_match = re.search(phone_pattern, search_window)
                         if phone_match:
                             coach['phone'] = phone_match.group(0).strip()
