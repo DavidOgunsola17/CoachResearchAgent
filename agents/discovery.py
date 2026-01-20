@@ -102,26 +102,28 @@ class DiscoveryAgent:
             List of prioritized directory URLs
         """
         # NEW PROMPT: Focus on directory pages with all coaches listed
-        input_text = f"""Find the main coaching staff directory page for {school_name} {sport}.
+        input_text = f"""Find the official coaching staff directory page for {school_name} {sport}.
 
 Requirements:
-1. ONE page that lists ALL coaches in a directory/roster format (not individual bio pages)
-2. Official athletics website (.edu domain strongly preferred)
-3. Page should show: names, titles, and contact information (emails, phone, Twitter, etc.)
-4. NOT individual coach bio pages (URLs should NOT have coach names in them)
-5. NOT social media, news articles, or third-party sites
+1.  **Sport-Specific:** The page MUST be for the **{sport}** team. Do not return general athletics staff pages.
+2.  **Coaches Directory:** The page must be a directory that lists MULTIPLE coaches, not an individual coach's bio. The URL should ideally contain words like "coaches" or "staff".
+3.  **Official Website:** The URL should be from the school's official athletics website (e.g., goduke.com, ohiostatebuckeyes.com). A .edu domain is strongly preferred.
+4.  **No PDFs:** The link MUST be a web page (HTML), not a PDF file. Do NOT return URLs ending in .pdf.
+5.  **No Other Pages:** Do NOT return news articles, social media pages, or general contact pages.
 
 Good examples of directory pages:
-- goduke.com/sports/football/coaches (lists all coaches)
-- ohiostatebuckeyes.com/sports/m-baskbl/staff (staff directory)
-- gostanford.com/sports/wsoc/coaches (coaching staff page)
+-   `https://gocards.com/sports/football/coaches` (official, sport-specific, has "coaches")
+-   `https://seminoles.com/sports/womens-soccer/coaches/` (official, sport-specific, has "coaches")
+-   `https://clemsontigers.com/sports/football/staff/` (official, sport-specific, has "staff")
 
-Bad examples (individual pages):
-- goduke.com/sports/football/roster/coaches/mike-elko/4315 (one coach only)
-- twitter.com/DukeFOOTBALL (social media)
-- espn.com/college-football/story (news article)
+Bad examples:
+-   `https://clemsontigers.com/contact-us/` (general contact page, not sport-specific)
+-   `https://seminoles.com/staff-directory-pdf/` (a PDF file)
+-   `https://gocards.com/staff.aspx` (a general staff directory, not specific to a sport)
+-   `https://lehighsports.com/news/2023/1/26/football-news.aspx` (news article)
+-   `https://twitter.com/ClemsonFB` (social media)
 
-Return 3-5 directory page URLs, most relevant first. URLs only, one per line.
+Return 5-7 of the most relevant directory page URLs, most relevant first. URLs only, one per line.
 """
 
         try:
@@ -167,16 +169,12 @@ Return 3-5 directory page URLs, most relevant first. URLs only, one per line.
                         url_matches = re.findall(r'https?://[^\s<>"\']+', line)
                         urls.extend(url_matches)
             
-            # Filter and validate URLs
+            # Step 2: Validate the content of each URL
             validated_urls = []
             for url in urls:
-                url_lower = url.lower()
-                # Filter out social media and news
-                if not any(site in url_lower for site in ['twitter', 'facebook', 'instagram', 'linkedin', 'youtube', 'news.com', 'article', 'espn.com']):
-                    # NEW: Filter out individual coach pages (URLs with coach names/IDs at end)
-                    # We want directory pages like /coaches or /staff, not /coaches/john-smith/123
-                    if not re.search(r'/coaches/[^/]+/\d+', url_lower) and not re.search(r'/roster/coaches/[^/]+', url_lower):
-                        validated_urls.append(url)
+                is_valid = await self._validate_url_content(url, school_name, sport)
+                if is_valid:
+                    validated_urls.append(url)
             
             # Remove duplicates while preserving order
             seen = set()
@@ -202,3 +200,54 @@ Return 3-5 directory page URLs, most relevant first. URLs only, one per line.
             # Wrap other exceptions as API errors
             logger.error(f"Discovery Agent: Error using OpenAI search: {str(e)}")
             raise APIError(f"OpenAI API request failed: {str(e)}") from e
+
+    async def _validate_url_content(self, url: str, school_name: str, sport: str) -> bool:
+        """
+        Validate if the URL content is a valid coaching staff directory page for the given sport.
+
+        Args:
+            url: The URL to validate
+            school_name: The name of the school
+            sport: The name of the sport
+
+        Returns:
+            True if the URL is a valid coaching staff directory, False otherwise.
+        """
+        try:
+            logger.debug(f"Validating content of URL: {url}")
+            # Use web_search to get a summary of the URL content
+            content_response = self.client.responses.create(
+                model=self.model_name,
+                tools=[{"type": "web_search"}],
+                input=f"Summarize the main content of the URL {url}"
+            )
+
+            content = content_response.output_text
+            if not content or "unable to process" in content.lower():
+                logger.warning(f"Could not retrieve content for URL: {url}")
+                return False
+
+            # Make a new LLM call to determine if the page is a valid directory
+            validation_prompt = f"""Is this page a coaching staff directory for {school_name} {sport}?
+
+Content Summary:
+---
+{content[:4000]}
+---
+
+Answer "Yes" or "No".
+"""
+
+            validation_response = self.client.responses.create(
+                model=self.model_name,
+                input=validation_prompt,
+            )
+
+            answer = validation_response.output_text.strip().lower()
+            logger.debug(f"Validation for {url}: LLM answered '{answer}'")
+
+            return "yes" in answer
+
+        except Exception as e:
+            logger.error(f"Discovery Agent: Error during URL content validation for {url}: {str(e)}")
+            return False
