@@ -49,47 +49,7 @@ Consistency is what gets you recruited. **SKOUT** automates the heavy lifting of
 ```bash
    pip install -r requirements.txt
 ```
-
-3. **Install Playwright browsers:**
    
-   This is required for web scraping. After installing the Python packages, run:
-```bash
-   sudo apt-get update && sudo apt-get install -y \
-    libatk1.0-0t64 \
-    libatk-bridge2.0-0t64 \
-    libcups2t64 \
-    libdrm2 \
-    libxkbcommon0 \
-    libatspi2.0-0t64 \
-    libxcomposite1 \
-    libxdamage1 \
-    libxfixes3 \
-    libxrandr2 \
-    libgbm1 \
-    libasound2t64 \
-    libxcb1 \
-    libxshmfence1 \
-    libglib2.0-0t64 \
-    libnss3 \
-    libnspr4 \
-    libdbus-1-3 \
-    libexpat1 \
-    libx11-6 \
-    libxcb-shm0 \
-    libxcb-shape0 \
-    libxext6 \
-    libxrender1 \
-    libxtst6 \
-    libxi6 \
-    libpango-1.0-0 \
-    libcairo2 \
-    libgdk-pixbuf-2.0-0
-```
-   
-   Then install the browser:
-```bash
-   playwright install chromium
-```
    
    > **Note:** If you're using a DevContainer or Codespaces, browsers are installed automatically during container setup.
 
