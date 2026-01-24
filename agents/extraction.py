@@ -10,7 +10,7 @@ import logging
 import sys
 import re
 from typing import List, Dict
-from openai import OpenAI
+from openai import AsyncOpenAI
 from openai import AuthenticationError, RateLimitError, APIError
 
 logger = logging.getLogger(__name__)
@@ -35,7 +35,7 @@ class ExtractionAgent:
             openai_api_key: OpenAI API key
             model_name: OpenAI model name
         """
-        self.client = OpenAI(api_key=openai_api_key)
+        self.client = AsyncOpenAI(api_key=openai_api_key)
         self.model_name = model_name
     
     async def extract_from_url(self, url: str) -> List[Dict[str, str]]:

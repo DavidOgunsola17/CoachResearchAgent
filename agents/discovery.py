@@ -10,7 +10,7 @@ import logging
 import re
 import sys
 from typing import List
-from openai import OpenAI
+from openai import AsyncOpenAI
 from openai import AuthenticationError, RateLimitError, APIError
 
 logger = logging.getLogger(__name__)
@@ -35,7 +35,7 @@ class DiscoveryAgent:
             openai_api_key: OpenAI API key
             model_name: OpenAI model name (default: gpt-4o-mini)
         """
-        self.client = OpenAI(api_key=openai_api_key)
+        self.client = AsyncOpenAI(api_key=openai_api_key)
         self.model_name = model_name
     
     async def discover_urls(self, school_name: str, sport: str) -> List[str]:

@@ -3,4 +3,9 @@ python-dotenv==1.0.0
 beautifulsoup4==4.12.2
 lxml==4.9.3
 openai>=1.0.0
-
+fastapi
+uvicorn[standard]
+supabase-py
+pydantic
+httpx
+PyJWT
