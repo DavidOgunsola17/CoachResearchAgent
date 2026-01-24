@@ -2,7 +2,7 @@ python-dotenv==1.0.0
 openai>=1.0.0
 fastapi
 uvicorn[standard]
-supabase-py
+supabase
 pydantic
 httpx
 PyJWT
