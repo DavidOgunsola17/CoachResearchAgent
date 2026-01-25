@@ -1,158 +1,131 @@
-#!/usr/bin/env python3
-"""
-Main CLI entry point for the AI Recruiting Agent.
+import uuid
+from datetime import datetime, timedelta, timezone
+from typing import Union, List
+from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks, status, Response
+from api.database import supabase
+from api.models import SearchRequest, JobResponse, Job, CoachProfile
+from api.auth import get_current_user_id
+from api.services import run_agent_pipeline
 
-UPDATED: Extraction agent no longer needs WebScraper - uses web_search directly
+app = FastAPI()
 
-Usage:
-    python main.py "School Name" "Sport"
-
-Example:
-    python main.py "Clemson University" "Men's Basketball"
-"""
-
-import argparse
-import asyncio
-import logging
-import os
-import sys
-from dotenv import load_dotenv
-
-from agents.discovery import DiscoveryAgent
-from agents.extraction import ExtractionAgent
-from agents.normalization import NormalizationAgent
-from utils.csv_writer import CSVWriter
-
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(sys.stdout)
-    ]
+@app.post(
+    "/api/search/coaches",
+    response_model=Union[JobResponse, List[CoachProfile]],
+    status_code=status.HTTP_202_ACCEPTED,
 )
+async def search_coaches(
+    search_request: SearchRequest,
+    response: Response,
+    background_tasks: BackgroundTasks,
+    user_id: str = Depends(get_current_user_id),
+):
+    """
+    Starts a new search for coaches. Checks for a recent cached result first.
+    If no valid cache is found, it creates a background job to run the agent pipeline.
+    """
+    # 1. Check for a recent cached result
+    cache_query = supabase.table("search_cache") \
+        .select("results, created_at") \
+        .eq("school_name", search_request.school_name) \
+        .eq("sport_name", search_request.sport_name) \
+        .order("created_at", desc=True) \
+        .limit(1) \
+        .execute()
+    
 
-logger = logging.getLogger(__name__)
+    if cache_query.data:
+        cached_result = cache_query.data[0]
+        # Use timezone-aware datetime for comparison
+        cached_time = datetime.fromisoformat(cached_result["created_at"])
+        if cached_time > datetime.now(timezone.utc) - timedelta(hours=24):
+            response.status_code = status.HTTP_200_OK
+            return [CoachProfile(**coach) for coach in cached_result["results"]]
 
+    # 2. If no cache, create a new background job
+    job_id = uuid.uuid4()
+    job_payload = {
+        "school": search_request.school_name,
+        "sport": search_request.sport_name,
+    }
 
-async def main():
-    """Main entry point for the CLI."""
-    # Parse arguments
-    parser = argparse.ArgumentParser(
-        description='AI Recruiting Agent - Extract coaching staff information from official athletics websites',
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  python main.py "Clemson University" "Men's Basketball"
-  python main.py "Ohio State" "Football"
-  python main.py "Stanford University" "Women's Soccer"
-  python main.py "duke" "football"
-        """
+    insert_job_query = supabase.table("background_jobs")\
+        .insert({
+            "id": str(job_id),
+            "user_id": user_id,
+            "status": "processing",
+            "payload": job_payload,
+        }) \
+        .execute()
+    
+
+    if not insert_job_query.data:
+        raise HTTPException(status_code=500, detail="Failed to create background job.")
+
+    # 3. Add the agent pipeline to background tasks
+    background_tasks.add_task(
+        run_and_update_job,
+        job_id=job_id,
+        school_name=search_request.school_name,
+        sport_name=search_request.sport_name,
     )
-    parser.add_argument('school', type=str, help='School name (e.g., "Clemson University")')
-    parser.add_argument('sport', type=str, help='Sport name (e.g., "Men\'s Basketball")')
-    parser.add_argument('--output', '-o', type=str, help='Output CSV filename (auto-generated if not provided)')
-    parser.add_argument('--verbose', '-v', action='store_true', help='Enable verbose logging')
-    
-    args = parser.parse_args()
-    
-    # Set logging level
-    if args.verbose:
-        logging.getLogger().setLevel(logging.DEBUG)
-    
-    school_name = args.school.strip()
-    sport = args.sport.strip()
-    
-    logger.info(f"Starting AI Recruiting Agent")
-    logger.info(f"School: {school_name}")
-    logger.info(f"Sport: {sport}")
-    
-    # Load environment variables
-    load_dotenv()
-    openai_api_key = os.getenv('OPENAI_API_KEY')
-    
-    if not openai_api_key:
-        logger.error("OPENAI_API_KEY not found in environment variables")
-        logger.error("Please create a .env file with: OPENAI_API_KEY=your_key_here")
-        sys.exit(1)
-    
+
+    return JobResponse(job_id=job_id, status="processing")
+
+
+@app.get("/api/search/status/{job_id}", response_model=Job)
+async def get_job_status(job_id: uuid.UUID, user_id: str = Depends(get_current_user_id)):
+    """
+    Retrieves the status and results of a background job.
+    Ensure users can only access their own jobs
+    """
+    job_query = supabase.table("background_jobs") \
+        .select("*") \
+        .eq("id", str(job_id)) \
+        .eq("user_id", user_id) \
+        .execute() 
+
+    if not job_query.data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found.")
+
+    return job_query.data[0]
+
+
+async def run_and_update_job(job_id: uuid.UUID, school_name: str, sport_name: str):
+    """
+    A wrapper function for the background task that runs the agent pipeline
+    and updates the job status in the database.
+    """
     try:
-        # Execute agent pipeline
-        logger.info("=" * 60)
-        logger.info("STEP 1: Discovery Agent")
-        logger.info("=" * 60)
-        
-        discovery_agent = DiscoveryAgent(openai_api_key)
-        urls = await discovery_agent.discover_urls(school_name, sport)
-        
-        if not urls:
-            logger.error("Discovery Agent: No URLs found. Exiting.")
-            sys.exit(1)
-        
-        logger.info(f"Discovery Agent: Found {len(urls)} candidate directory URLs")
-        
-        logger.info("=" * 60)
-        logger.info("STEP 2: Extraction Agent")
-        logger.info("=" * 60)
-        
-        # No WebScraper needed - extraction uses web_search directly
-        extraction_agent = ExtractionAgent(openai_api_key)
-        coaches = await extraction_agent.extract_from_multiple_urls(urls)
-        
-        if not coaches:
-            logger.error("Extraction Agent: No coaches found. Exiting.")
-            sys.exit(1)
-        
-        logger.info(f"Extraction Agent: Extracted {len(coaches)} coaches")
-        
-        logger.info("=" * 60)
-        logger.info("STEP 3: Normalization Agent")
-        logger.info("=" * 60)
-        
-        normalization_agent = NormalizationAgent()
-        normalized_coaches = normalization_agent.normalize_coaches(coaches)
-        
-        logger.info(f"Normalization Agent: Normalized to {len(normalized_coaches)} coaches")
-        
-        logger.info("=" * 60)
-        logger.info("STEP 4: CSV Output")
-        logger.info("=" * 60)
-        
-        # Generate filename
-        if args.output:
-            filename = args.output
-        else:
-            filename = CSVWriter.generate_filename(school_name, sport)
-        
-        success = CSVWriter.write_coaches(normalized_coaches, filename)
-        
-        if success:
-            logger.info("=" * 60)
-            logger.info("SUCCESS")
-            logger.info("=" * 60)
-            logger.info(f"Output file: {filename}")
-            logger.info(f"Total coaches extracted: {len(normalized_coaches)}")
-            
-            # Show summary
-            with_email = sum(1 for c in normalized_coaches if c.get('email'))
-            with_phone = sum(1 for c in normalized_coaches if c.get('phone'))
-            with_twitter = sum(1 for c in normalized_coaches if c.get('twitter'))
-            
-            logger.info(f"  - Coaches with email: {with_email}")
-            logger.info(f"  - Coaches with phone: {with_phone}")
-            logger.info(f"  - Coaches with Twitter: {with_twitter}")
-            logger.info("=" * 60)
-        else:
-            logger.error("Failed to write CSV file")
-            sys.exit(1)
-    
-    except KeyboardInterrupt:
-        logger.info("\nInterrupted by user")
-        sys.exit(1)
+        # Run the agent pipeline
+        results = await run_agent_pipeline(school_name, sport_name)
+
+        # Update job as completed
+        supabase.table("background_jobs") \
+            .update({
+                "status": "completed",
+                "results": results,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }) \
+            .eq("id", str(job_id)) \
+            .execute()
+
+        # Add to cache
+        supabase.table("search_cache") \
+            .insert({
+                "school_name": school_name,
+                "sport_name": sport_name,
+                "results": results,
+            }) \
+            .execute()
+
     except Exception as e:
-        logger.error(f"Unexpected error: {str(e)}", exc_info=True)
-        sys.exit(1)
-
-
-if __name__ == '__main__':
-    asyncio.run(main())
+        # Update job as failed
+        supabase.table("background_jobs") \
+            .update({
+                "status": "failed",
+                "error_message": str(e),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }) \
+            .eq("id", str(job_id)) \
+            .execute()
