@@ -9,7 +9,6 @@ individual coach bio pages. Prefers .edu domains and official athletics subdomai
 import logging
 import os
 import re
-import sys
 from typing import List
 from openai import AsyncOpenAI
 from openai import AuthenticationError, RateLimitError, APIError
