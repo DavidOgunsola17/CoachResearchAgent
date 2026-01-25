@@ -8,11 +8,47 @@ from api.models import SearchRequest, JobResponse, Job, CoachProfile
 from api.auth import get_current_user_id
 from api.services import run_agent_pipeline
 from api.utils import retry_async
+import os
+import jwt  # PyJWT library (already in your requirements.txt)
+from fastapi import Request
 from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 
-limiter = Limiter(key_func=get_remote_address)
+def get_user_identifier(request: Request):
+    """
+    Extract user_id from JWT token for rate limiting.
+    Falls back to IP if user is not authenticated.
+    """
+    try:
+        auth_header = request.headers.get("Authorization", "")
+        if not auth_header.startswith("Bearer "):
+            return request.client.host
+        
+        token = auth_header.split(" ")[1]
+        secret = os.environ.get("SUPABASE_JWT_SECRET")
+        
+        if not secret:
+            # Log warning but don't crash - fallback to IP
+            print("WARNING: SUPABASE_JWT_SECRET not set, using IP-based rate limiting")
+            return request.client.host
+        
+        payload = jwt.decode(token, secret, algorithms=["HS256"], audience="authenticated")
+        user_id = payload.get("sub")
+        
+        return user_id if user_id else request.client.host
+        
+    except jwt.ExpiredSignatureError:
+        # Token expired - use IP as fallback
+        return request.client.host
+    except jwt.InvalidTokenError:
+        # Invalid token - use IP as fallback
+        return request.client.host
+    except Exception as e:
+        # Unexpected error - log it and use IP
+        print(f"Rate limiter error: {str(e)}")
+        return request.client.host
+
+limiter = Limiter(key_func=get_user_identifier)
 app = FastAPI()
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
