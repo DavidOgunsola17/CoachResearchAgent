@@ -85,6 +85,7 @@ class NormalizationAgent:
             'phone': self._normalize_phone(coach.get('phone', '')),  # NEW FIELD
             'twitter': self._normalize_twitter(coach.get('twitter', '')),
             'source_url': coach.get('source_url', '')
+            'school_logo_url': coach.get('school_logo_url', '')
         }
     
     def _normalize_name(self, name: str) -> str:
