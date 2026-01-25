@@ -67,6 +67,7 @@ app.add_middleware(
     response_model=Union[JobResponse, List[CoachProfile]],
     status_code=status.HTTP_202_ACCEPTED,
 )
+@limiter.limit("10/minute")
 async def search_coaches(
     search_request: SearchRequest,
     response: Response,
