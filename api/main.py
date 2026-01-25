@@ -2,12 +2,22 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Union, List
 from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks, status, Response
+from fastapi.middleware.cors import CORSMiddleware  # ← NEW
 from api.db import supabase, run_supabase_query
 from api.models import SearchRequest, JobResponse, Job, CoachProfile
 from api.auth import get_current_user_id
 from api.services import run_agent_pipeline
 
 app = FastAPI()
+
+# NEW - Allow mobile app to call API
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.post(
     "/api/search/coaches",
