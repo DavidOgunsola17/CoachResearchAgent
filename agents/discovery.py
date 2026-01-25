@@ -129,7 +129,7 @@ Return 5-7 of the most relevant directory page URLs, most relevant first. URLs o
 
         try:
             # Use OpenAI Responses API with web_search tool
-            response = self.client.responses.create(
+            response = await self.client.responses.create(
                 model=self.model_name,
                 tools=[{"type": "web_search"}],
                 input=input_text
@@ -217,7 +217,7 @@ Return 5-7 of the most relevant directory page URLs, most relevant first. URLs o
         try:
             logger.debug(f"Validating content of URL: {url}")
             # Use web_search to get a summary of the URL content
-            content_response = self.client.responses.create(
+            content_response = await self.client.responses.create(
                 model=self.model_name,
                 tools=[{"type": "web_search"}],
                 input=f"Summarize the main content of the URL {url}"
@@ -239,7 +239,7 @@ Content Summary:
 Answer "Yes" or "No".
 """
 
-            validation_response = self.client.responses.create(
+            validation_response = await self.client.responses.create(
                 model=self.model_name,
                 input=validation_prompt,
             )

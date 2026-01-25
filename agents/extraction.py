@@ -70,22 +70,28 @@ class ExtractionAgent:
         """
         input_text = f"""Visit this coaching staff directory URL: {source_url}
 
+PART 1: COACH DATA
 Extract ALL coaches listed on the page with their contact information:
+For each coach, extract ONLY what is EXPLICITLY visible:
+- Full name
+- Position/title
+- Email address
+- Phone number
+- Twitter handle/URL
 
-For each coach, extract ONLY what is EXPLICITLY visible on the page:
-- Full name (exactly as shown)
-- Position/title (exactly as shown)  
-- Email address (ONLY if displayed)
-- Phone number (ONLY if displayed)
-- Twitter/social media handle or URL (ONLY if displayed)
+PART 2: UNIVERSITY LOGO
+Find the official athletic logo for the university on this page.
+- Look for a direct, permanent URL to the primary athletic logo (e.g., the Duke 'D', Stanford 'S', or Miami 'U').
+- Prioritize high-resolution .png or .svg files from the official athletic domain.
+- If not directly on the page, use web_search to find the "official athletic logo png" for this specific university.
 
 CRITICAL RULES:
-- Do NOT guess or infer any information
-- Include all coaching positions: Head Coach, Assistant Coach, Associate Coach, Coordinator, Director, etc.
-- EXCLUDE: trainers, medical staff, equipment managers, non-coaching staff
-- If a field is not visible, leave it empty
-
-Return the data in this EXACT format for each coach (one per line):
+- Include all coaching positions (Head, Assistant, Associate, etc.).
+- EXCLUDE: trainers, medical staff, equipment managers.
+- Ensure the logo is a .png, .svg, or .jpg link I can use in my app
+- Return the data in this EXACT format (one per line):
+UNIVERSITY_LOGO: [https://university.edu/assets/logo.png]
+---
 NAME: [full name]
 POSITION: [position/title]
 EMAIL: [email or empty]
@@ -93,10 +99,10 @@ PHONE: [phone or empty]
 TWITTER: [twitter or empty]
 ---
 
-List all coaches found (up to 15 maximum)."""
+List up to 15 coaches maximum."""
 
         try:
-            response = self.client.responses.create(
+            response = await self.client.responses.create(
                 model=self.model_name,
                 tools=[{"type": "web_search"}],
                 input=input_text
@@ -148,8 +154,15 @@ List all coaches found (up to 15 maximum)."""
             List of coach dictionaries
         """
         coaches = []
-        current_coach = {}
-        
+        logo_url = None
+
+        # Extract logo URL first
+        logo_match = re.search(r'UNIVERSITY_LOGO:\s*(\S+)', text, re.IGNORECASE)
+        if logo_match:
+            url = logo_match.group(1).strip('[]')
+            if any(url.lower().endswith(ext) for ext in ['.png', '.svg', '.jpg', '.jpeg', '.webp']):
+                logo_url = url
+
         # Split by coach separator or double newlines
         sections = re.split(r'---+|\n\n+', text)
         
@@ -183,7 +196,8 @@ List all coaches found (up to 15 maximum)."""
                     'email': coach_data.get('email', '').strip(),
                     'phone': coach_data.get('phone', '').strip(),
                     'twitter': coach_data.get('twitter', '').strip(),
-                    'source_url': source_url
+                    'source_url': source_url,
+                    'school_logo_url': logo_url
                 }
                 
                 # Filter out non-coaching staff
