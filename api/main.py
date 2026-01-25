@@ -6,6 +6,7 @@ from api.db import supabase, run_supabase_query
 from api.models import SearchRequest, JobResponse, Job, CoachProfile
 from api.auth import get_current_user_id
 from api.services import run_agent_pipeline
+from api.utils import retry_async
 
 app = FastAPI()
 
@@ -31,8 +32,10 @@ async def search_coaches(
         .eq("sport_name", search_request.sport_name) \
         .order("created_at", desc=True) \
         .limit(1)
-    cache_query = await run_supabase_query(query)
-    
+    cache_query = await retry_async(
+    lambda: run_supabase_query(query), 
+    max_retries=2
+    )
 
     if cache_query.data:
         cached_result = cache_query.data[0]
@@ -108,7 +111,10 @@ async def run_and_update_job(job_id: uuid.UUID, school_name: str, sport_name: st
                 "updated_at": datetime.now(timezone.utc).isoformat(),
             }) \
             .eq("id", str(job_id))
-        await run_supabase_query(update_query)
+        await retry_async(
+            lambda: run_supabase_query(update_query),
+            max_retries=3
+        )
 
         # Add to cache
         insert_query = supabase.table("search_cache") \
