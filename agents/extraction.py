@@ -96,7 +96,7 @@ TWITTER: [twitter or empty]
 List all coaches found (up to 15 maximum)."""
 
         try:
-            response = self.client.responses.create(
+            response = await self.client.responses.create(
                 model=self.model_name,
                 tools=[{"type": "web_search"}],
                 input=input_text
