@@ -34,9 +34,7 @@ async def run_agent_pipeline(school_name: str, sport: str) -> List[Dict[str, str
 
     # 3. Normalization Agent
     normalization_agent = NormalizationAgent()
-    normalized_coaches = await asyncio.to_thread(
-        normalization_agent.normalize_coaches,
-        raw_coaches
+    normalized_coaches = normalization_agent.normalize_coaches(raw_coaches)
     )
 
     # 4. Pydantic Validation
