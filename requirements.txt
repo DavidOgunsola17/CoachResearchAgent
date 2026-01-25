@@ -6,3 +6,4 @@ supabase
 pydantic
 httpx
 PyJWT
+slowapi
