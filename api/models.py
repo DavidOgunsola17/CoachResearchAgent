@@ -10,6 +10,7 @@ class CoachProfile(BaseModel):
     twitter: Optional[str] = None
     school: str
     sport: str
+    school_logo_url: Optional[str] = None
 
 class SearchRequest(BaseModel):
     school_name: str
