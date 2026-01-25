@@ -10,7 +10,7 @@ import logging
 import re
 import sys
 from typing import List
-from openai import OpenAI
+from openai import AsyncOpenAI
 from openai import AuthenticationError, RateLimitError, APIError
 
 logger = logging.getLogger(__name__)
@@ -35,7 +35,7 @@ class DiscoveryAgent:
             openai_api_key: OpenAI API key
             model_name: OpenAI model name (default: gpt-4o-mini)
         """
-        self.client = OpenAI(api_key=openai_api_key)
+        self.client = AsyncOpenAI(api_key=openai_api_key)
         self.model_name = model_name
     
     async def discover_urls(self, school_name: str, sport: str) -> List[str]:
@@ -171,7 +171,7 @@ Return 5-7 of the most relevant directory page URLs, most relevant first. URLs o
             
             # Step 2: Validate the content of each URL
             validated_urls = []
-            for url in urls:
+            for url in urls[:3]:  # ← Add [:3] here 
                 is_valid = await self._validate_url_content(url, school_name, sport)
                 if is_valid:
                     validated_urls.append(url)

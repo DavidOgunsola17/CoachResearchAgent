@@ -26,9 +26,6 @@ wheels/
 .installed.cfg
 *.egg
 
-# Playwright
-.playwright/
-
 # IDE
 .vscode/
 .idea/
