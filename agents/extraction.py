@@ -8,7 +8,6 @@ eliminating HTML parsing issues and hallucinations.
 import json
 import logging
 import os
-import sys
 import re
 from typing import List, Dict
 from openai import AsyncOpenAI
@@ -127,20 +126,20 @@ List up to 15 coaches maximum."""
             logger.error("ERROR: OpenAI API key is invalid or not configured.")
             logger.error("Please verify your OPENAI_API_KEY in the .env file.")
             logger.error(f"Details: {str(e)}")
-            sys.exit(1)
+            raise AuthenticationError("Extraction Agent: OpenAI key invalid.") from e
         except RateLimitError as e:
             logger.error("ERROR: OpenAI API rate limit exceeded or insufficient tokens.")
             logger.error("Please check your API account and try again later.")
             logger.error(f"Details: {str(e)}")
-            sys.exit(1)
+            raise RateLimitError("Extraction Agent: Rate limit reached.") from e
         except APIError as e:
             logger.error("ERROR: OpenAI API error occurred.")
             logger.error(f"Details: {str(e)}")
-            sys.exit(1)
+            raise APIError("Extraction Agent: OpenAI API failed.") from e
         except Exception as e:
             logger.error(f"ERROR: Unexpected error in Extraction Agent: {str(e)}")
             logger.error("Please check your OpenAI API configuration and try again.")
-            sys.exit(1)
+            raise Exception(f"Extraction failed: {str(e)}")
     
     def _parse_structured_response(self, text: str, source_url: str) -> List[Dict[str, str]]:
         """
