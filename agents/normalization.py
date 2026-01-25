@@ -8,8 +8,6 @@ ensures CSV-safe formatting, removes duplicates, and limits the final output to 
 import logging
 import re
 from typing import List, Dict
-import csv
-from io import StringIO
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +60,7 @@ class NormalizationAgent:
                 
                 # CHANGED: Stop at 15 coaches (was 10)
                 if len(normalized) >= 15:
-                    logger.info(f"Normalization Agent: Reached limit of 15 coaches")
+                    logger.info("Normalization Agent: Reached limit of 15 coaches")
                     break
         
         logger.info(f"Normalization Agent: Normalized to {len(normalized)} unique coaches")

@@ -1,4 +1,5 @@
 import os
+import asyncio
 import logging
 from typing import List, Dict
 from agents.discovery import DiscoveryAgent
@@ -26,14 +27,17 @@ async def run_agent_pipeline(school_name: str, sport: str) -> List[Dict[str, str
 
     # 2. Extraction Agent
     extraction_agent = ExtractionAgent(openai_api_key)
-    coaches = await extraction_agent.extract_from_multiple_urls(urls)
-    if not coaches:
+    raw_coaches = await extraction_agent.extract_from_multiple_urls(urls)
+    if not raw_coaches:
         logger.warning(f"No coaches extracted for {school_name} {sport}")
         return []
 
     # 3. Normalization Agent
     normalization_agent = NormalizationAgent()
-    normalized_coaches = normalization_agent.normalize_coaches(coaches)
+    normalized_coaches = await asyncio.to_thread(
+        normalization_agent.normalize_coaches,
+        raw_coaches
+    )
 
     # 4. Pydantic Validation
     validated_coaches = [

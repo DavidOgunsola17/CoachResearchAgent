@@ -7,6 +7,7 @@ eliminating HTML parsing issues and hallucinations.
 
 import json
 import logging
+import os
 import sys
 import re
 from typing import List, Dict
@@ -35,7 +36,7 @@ class ExtractionAgent:
             openai_api_key: OpenAI API key
             model_name: OpenAI model name
         """
-        self.client = AsyncOpenAI(api_key=openai_api_key)
+        self.client = AsyncOpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
         self.model_name = model_name
     
     async def extract_from_url(self, url: str) -> List[Dict[str, str]]:

@@ -7,6 +7,7 @@ individual coach bio pages. Prefers .edu domains and official athletics subdomai
 """
 
 import logging
+import os
 import re
 import sys
 from typing import List
@@ -35,7 +36,7 @@ class DiscoveryAgent:
             openai_api_key: OpenAI API key
             model_name: OpenAI model name (default: gpt-4o-mini)
         """
-        self.client = AsyncOpenAI(api_key=openai_api_key)
+        self.client = AsyncOpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
         self.model_name = model_name
     
     async def discover_urls(self, school_name: str, sport: str) -> List[str]:
