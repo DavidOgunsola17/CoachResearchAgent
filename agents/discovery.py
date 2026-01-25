@@ -171,7 +171,7 @@ Return 5-7 of the most relevant directory page URLs, most relevant first. URLs o
             
             # Step 2: Validate the content of each URL
             validated_urls = []
-            for url in urls:
+            for url in urls[:3]:  # ← Add [:3] here 
                 is_valid = await self._validate_url_content(url, school_name, sport)
                 if is_valid:
                     validated_urls.append(url)
