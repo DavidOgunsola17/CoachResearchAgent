@@ -63,20 +63,20 @@ class DiscoveryAgent:
             logger.error("ERROR: OpenAI API key is invalid or not configured.")
             logger.error("Please verify your OPENAI_API_KEY in the .env file.")
             logger.error(f"Details: {str(e)}")
-            sys.exit(1)
+            raise AuthenticationError("OpenAI API key invalid.")
         except RateLimitError as e:
             logger.error("ERROR: OpenAI API rate limit exceeded or insufficient tokens.")
             logger.error("Please check your API account and try again later.")
             logger.error(f"Details: {str(e)}")
-            sys.exit(1)
+            raise RateLimitError("OpenAI tokens exhausted.")
         except APIError as e:
             logger.error("ERROR: OpenAI API error occurred.")
             logger.error(f"Details: {str(e)}")
-            sys.exit(1)
+            raise APIError("OpenAI service is down.")
         except Exception as e:
             logger.error(f"ERROR: Unexpected error in Discovery Agent: {str(e)}")
             logger.error("Please check your OpenAI API configuration and try again.")
-            sys.exit(1)
+            raise Exception(f"Discovery failed: {str(e)}")
         
         if not search_urls:
             logger.warning("Discovery Agent: No URLs found via OpenAI search")
