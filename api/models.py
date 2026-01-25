@@ -12,6 +12,13 @@ class CoachProfile(BaseModel):
     sport: str
     school_logo_url: Optional[str] = None
 
+    @validator("school_logo_url")
+    def ensure_logo_fallback(cls, v):
+        # If scraper fails or returns None, use a generic placeholder
+        if not v:
+            return "https://upload.wikimedia.org/wikipedia/commons/3/38/Solid_white_bordered.png"
+        return v
+
 class SearchRequest(BaseModel):
     school_name: str
     sport_name: str
