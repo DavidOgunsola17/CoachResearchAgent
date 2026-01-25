@@ -25,15 +25,14 @@ async def search_coaches(
     If no valid cache is found, it creates a background job to run the agent pipeline.
     """
     # 1. Check for a recent cached result
-    cache_query = await (
-        supabase.table("search_cache")
-        .select("results, created_at")
-        .eq("school_name", search_request.school_name)
-        .eq("sport_name", search_request.sport_name)
-        .order("created_at", desc=True)
-        .limit(1)
+    cache_query = supabase.table("search_cache") \
+        .select("results, created_at") \
+        .eq("school_name", search_request.school_name) \
+        .eq("sport_name", search_request.sport_name) \
+        .order("created_at", desc=True) \
+        .limit(1) \
         .execute()
-    )
+    
 
     if cache_query.data:
         cached_result = cache_query.data[0]
@@ -50,16 +49,15 @@ async def search_coaches(
         "sport": search_request.sport_name,
     }
 
-    insert_job_query = await (
-        supabase.table("background_jobs")
+    insert_job_query = supabase.table("background_jobs")\
         .insert({
             "id": str(job_id),
             "user_id": user_id,
             "status": "processing",
             "payload": job_payload,
-        })
+        }) \
         .execute()
-    )
+    
 
     if not insert_job_query.data:
         raise HTTPException(status_code=500, detail="Failed to create background job.")
@@ -79,14 +77,13 @@ async def search_coaches(
 async def get_job_status(job_id: uuid.UUID, user_id: str = Depends(get_current_user_id)):
     """
     Retrieves the status and results of a background job.
+    Ensure users can only access their own jobs
     """
-    job_query = await (
-        supabase.table("background_jobs")
-        .select("*")
-        .eq("id", str(job_id))
-        .eq("user_id", user_id)  # Ensure users can only access their own jobs
-        .execute()
-    )
+    job_query = supabase.table("background_jobs") \
+        .select("*") \
+        .eq("id", str(job_id)) \
+        .eq("user_id", user_id) \
+        .execute() 
 
     if not job_query.data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found.")
@@ -104,37 +101,31 @@ async def run_and_update_job(job_id: uuid.UUID, school_name: str, sport_name: st
         results = await run_agent_pipeline(school_name, sport_name)
 
         # Update job as completed
-        await (
-            supabase.table("background_jobs")
+        supabase.table("background_jobs") \
             .update({
                 "status": "completed",
                 "results": results,
                 "updated_at": datetime.now(timezone.utc).isoformat(),
-            })
-            .eq("id", str(job_id))
+            }) \
+            .eq("id", str(job_id)) \
             .execute()
-        )
 
         # Add to cache
-        await (
-            supabase.table("search_cache")
+        supabase.table("search_cache") \
             .insert({
                 "school_name": school_name,
                 "sport_name": sport_name,
                 "results": results,
-            })
+            }) \
             .execute()
-        )
 
     except Exception as e:
         # Update job as failed
-        await (
-            supabase.table("background_jobs")
+        supabase.table("background_jobs") \
             .update({
                 "status": "failed",
                 "error_message": str(e),
                 "updated_at": datetime.now(timezone.utc).isoformat(),
-            })
-            .eq("id", str(job_id))
+            }) \
+            .eq("id", str(job_id)) \
             .execute()
-        )
