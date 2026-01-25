@@ -84,7 +84,7 @@ class NormalizationAgent:
             'email': self._normalize_email(coach.get('email', '')),
             'phone': self._normalize_phone(coach.get('phone', '')),  # NEW FIELD
             'twitter': self._normalize_twitter(coach.get('twitter', '')),
-            'source_url': coach.get('source_url', '')
+            'source_url': coach.get('source_url', ''),
             'school_logo_url': coach.get('school_logo_url', '')
         }
     
