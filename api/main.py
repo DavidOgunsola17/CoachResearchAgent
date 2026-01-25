@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Union, List
 from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks, status, Response
-from api.database import supabase
+from api.db import supabase, run_supabase_query
 from api.models import SearchRequest, JobResponse, Job, CoachProfile
 from api.auth import get_current_user_id
 from api.services import run_agent_pipeline
@@ -25,13 +25,13 @@ async def search_coaches(
     If no valid cache is found, it creates a background job to run the agent pipeline.
     """
     # 1. Check for a recent cached result
-    cache_query = supabase.table("search_cache") \
+    query = supabase.table("search_cache") \
         .select("results, created_at") \
         .eq("school_name", search_request.school_name) \
         .eq("sport_name", search_request.sport_name) \
         .order("created_at", desc=True) \
-        .limit(1) \
-        .execute()
+        .limit(1)
+    cache_query = await run_supabase_query(query)
     
 
     if cache_query.data:
@@ -49,14 +49,14 @@ async def search_coaches(
         "sport": search_request.sport_name,
     }
 
-    insert_job_query = supabase.table("background_jobs")\
+    insert_query = supabase.table("background_jobs")\
         .insert({
             "id": str(job_id),
             "user_id": user_id,
             "status": "processing",
             "payload": job_payload,
-        }) \
-        .execute()
+        })
+    insert_job_query = await run_supabase_query(insert_query)
     
 
     if not insert_job_query.data:
@@ -79,11 +79,11 @@ async def get_job_status(job_id: uuid.UUID, user_id: str = Depends(get_current_u
     Retrieves the status and results of a background job.
     Ensure users can only access their own jobs
     """
-    job_query = supabase.table("background_jobs") \
+    query = supabase.table("background_jobs") \
         .select("*") \
         .eq("id", str(job_id)) \
-        .eq("user_id", user_id) \
-        .execute() 
+        .eq("user_id", user_id)
+    job_query = await run_supabase_query(query)
 
     if not job_query.data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found.")
@@ -101,31 +101,31 @@ async def run_and_update_job(job_id: uuid.UUID, school_name: str, sport_name: st
         results = await run_agent_pipeline(school_name, sport_name)
 
         # Update job as completed
-        supabase.table("background_jobs") \
+        update_query = supabase.table("background_jobs") \
             .update({
                 "status": "completed",
                 "results": results,
                 "updated_at": datetime.now(timezone.utc).isoformat(),
             }) \
-            .eq("id", str(job_id)) \
-            .execute()
+            .eq("id", str(job_id))
+        await run_supabase_query(update_query)
 
         # Add to cache
-        supabase.table("search_cache") \
+        insert_query = supabase.table("search_cache") \
             .insert({
                 "school_name": school_name,
                 "sport_name": sport_name,
                 "results": results,
-            }) \
-            .execute()
+            })
+        await run_supabase_query(insert_query)
 
     except Exception as e:
         # Update job as failed
-        supabase.table("background_jobs") \
+        fail_query = supabase.table("background_jobs") \
             .update({
                 "status": "failed",
                 "error_message": str(e),
                 "updated_at": datetime.now(timezone.utc).isoformat(),
             }) \
-            .eq("id", str(job_id)) \
-            .execute()
+            .eq("id", str(job_id))
+        await run_supabase_query(fail_query)

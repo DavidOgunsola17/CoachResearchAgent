@@ -35,6 +35,7 @@ wheels/
 
 # Output files
 *.csv
+*.log
 
 # OS
 .DS_Store
