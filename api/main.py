@@ -69,6 +69,7 @@ app.add_middleware(
 )
 @limiter.limit("10/minute")
 async def search_coaches(
+    request: Request,  # ← ADD THIS LINE
     search_request: SearchRequest,
     response: Response,
     background_tasks: BackgroundTasks,
@@ -188,3 +189,16 @@ async def run_and_update_job(job_id: uuid.UUID, school_name: str, sport_name: st
             }) \
             .eq("id", str(job_id))
         await run_supabase_query(fail_query)
+
+    # Add this new endpoint (no auth required)
+@app.post("/api/search/coaches/dev", response_model=List[CoachProfile])
+async def dev_search_coaches(search_request: SearchRequest):
+    """
+    DEV ONLY - No auth, no background jobs, no database.
+    Just runs the pipeline and returns results immediately.
+    """
+    results = await run_agent_pipeline(
+        search_request.school_name, 
+        search_request.sport_name
+    )
+    return [CoachProfile(**coach) for coach in results]
