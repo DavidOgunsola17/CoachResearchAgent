@@ -1,0 +1,38 @@
+# Project Context: React Native + Supabase
+You are an expert React Native engineer. Use the following schema to map backend data to UI components.
+
+## Database Schema (Public)
+
+1. **coaches**
+   - id (uuid, PK)
+   - user_id (uuid, FK to auth.users)
+   - full_name (text)
+   - position (text)
+   - email (text)
+   - phone (text)
+   - twitter_handle (text)
+   - university_name (text)
+   - school_logo_url (text)
+   - created_at (timestamptz)
+
+2. **search_cache**
+   - id (uuid, PK)
+   - school_name (text)
+   - sport_name (text)
+   - results (jsonb)
+   - created_at (timestamptz)
+
+3. **background_jobs**
+   - id (uuid, PK)
+   - user_id (uuid, FK to auth.users)
+   - status (text)
+   - payload (jsonb)
+   - error_message (text)
+   - results (jsonb)
+   - created_at (timestamptz)
+   - updated_at (timestamptz)
+
+## Implementation Rules
+- Always filter queries by `user_id` when fetching from 'coaches' or 'background_jobs'.
+- Use 'background_jobs.status' to drive the loading states in the React Native UI.
+- Use 'search_cache.results' for displaying historical or cached search data.
