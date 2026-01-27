@@ -1,16 +1,19 @@
 import { useEffect } from 'react';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { View, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useAuthStore } from '../stores/authStore';
 import { useNetworkStore } from '../stores/networkStore';
+import { useContactsStore } from '../stores/contactsStore';
 import OfflineScreen from '../components/OfflineScreen';
+import SplashScreenComponent from '../components/SplashScreen';
 import Colors from '../constants/colors';
 
 export default function RootLayout() {
   const { session, initialized, initialize } = useAuthStore();
   const { isConnected, initialize: initNetwork } = useNetworkStore();
+  const loadContacts = useContactsStore((s) => s.loadContacts);
   const segments = useSegments();
   const router = useRouter();
 
@@ -18,6 +21,13 @@ export default function RootLayout() {
     initialize();
     initNetwork();
   }, []);
+
+  // Load contacts once authenticated
+  useEffect(() => {
+    if (session) {
+      loadContacts();
+    }
+  }, [session]);
 
   useEffect(() => {
     if (!initialized) return;
@@ -33,10 +43,10 @@ export default function RootLayout() {
 
   if (!initialized) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={Colors.primary} />
+      <>
+        <SplashScreenComponent />
         <StatusBar style="light" />
-      </View>
+      </>
     );
   }
 
@@ -76,12 +86,6 @@ export default function RootLayout() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
     backgroundColor: Colors.background,
   },
 });

@@ -11,6 +11,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import Colors from '../constants/colors';
 import { useSearchStore } from '../stores/searchStore';
+import { useContactsStore } from '../stores/contactsStore';
 import CoachCard from '../components/CoachCard';
 
 export default function ResultsScreen() {
@@ -20,10 +21,10 @@ export default function ResultsScreen() {
     selectedIndices,
     toggleSelect,
     clearSelection,
-    toggleSaved,
-    isSaved,
     reset,
   } = useSearchStore();
+
+  const { saveContact, removeContact, isContactSaved } = useContactsStore();
 
   const selectMode = selectedIndices.size > 0;
 
@@ -44,7 +45,7 @@ export default function ResultsScreen() {
 
   const handleSaveToggle = useCallback((index: number) => {
     const coach = useSearchStore.getState().results[index];
-    const saved = useSearchStore.getState().isSaved(coach);
+    const saved = isContactSaved(coach.name, coach.school);
     if (saved) {
       Alert.alert(
         'Unsave Coach',
@@ -54,12 +55,12 @@ export default function ResultsScreen() {
           {
             text: 'Unsave',
             style: 'destructive',
-            onPress: () => toggleSaved(coach),
+            onPress: () => removeContact(coach),
           },
         ],
       );
     } else {
-      toggleSaved(coach);
+      saveContact(coach);
     }
   }, []);
 
@@ -126,7 +127,7 @@ export default function ResultsScreen() {
         renderItem={({ item, index }) => (
           <CoachCard
             coach={item}
-            saved={isSaved(item)}
+            saved={isContactSaved(item.name, item.school)}
             selected={selectedIndices.has(index)}
             selectMode={selectMode}
             onPress={() => handleCardPress(index)}

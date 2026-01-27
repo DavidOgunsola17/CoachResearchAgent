@@ -49,6 +49,7 @@ export default function DrawerLayout() {
         name="contacts"
         options={{
           title: 'Contacts',
+          headerShown: false,
           drawerLabel: 'Contacts',
           drawerIcon: ({ color, size }) => (
             <Ionicons name="people" size={size} color={color} />
