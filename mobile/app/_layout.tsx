@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Slot, useRouter, useSegments } from 'expo-router';
+import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -51,7 +51,23 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={styles.container}>
-      <Slot />
+      <Stack
+        screenOptions={{
+          headerShown: false,
+          contentStyle: { backgroundColor: Colors.background },
+        }}
+      >
+        <Stack.Screen name="(auth)" />
+        <Stack.Screen name="(drawer)" />
+        <Stack.Screen
+          name="results"
+          options={{ animation: 'slide_from_right' }}
+        />
+        <Stack.Screen
+          name="coach-profile"
+          options={{ animation: 'slide_from_right' }}
+        />
+      </Stack>
       <StatusBar style="light" />
     </GestureHandlerRootView>
   );

@@ -38,7 +38,7 @@ export default function DrawerLayout() {
         name="index"
         options={{
           title: 'SKOUT',
-          headerTitle: 'SKOUT',
+          headerShown: false,
           drawerLabel: 'SKOUT',
           drawerIcon: ({ color, size }) => (
             <Ionicons name="search" size={size} color={color} />
