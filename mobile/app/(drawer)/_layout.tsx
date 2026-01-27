@@ -60,6 +60,7 @@ export default function DrawerLayout() {
         name="templates"
         options={{
           title: 'Templates',
+          headerShown: false,
           drawerLabel: 'Templates',
           drawerIcon: ({ color, size }) => (
             <Ionicons name="document-text" size={size} color={color} />
