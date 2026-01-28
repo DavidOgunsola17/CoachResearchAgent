@@ -80,11 +80,7 @@ export default function SkoutScreen() {
           <Ionicons name="chevron-down" size={14} color={Colors.textSecondary} />
         </View>
 
-        <TouchableOpacity hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-          <View style={styles.profileIcon}>
-            <Ionicons name="person" size={18} color={Colors.textSecondary} />
-          </View>
-        </TouchableOpacity>
+        <View style={{ width: 34 }} />
       </View>
 
       {/* Content */}
@@ -163,16 +159,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: Colors.textPrimary,
-  },
-  profileIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: Colors.surfaceBackground,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: Colors.border,
   },
   content: {
     flex: 1,
