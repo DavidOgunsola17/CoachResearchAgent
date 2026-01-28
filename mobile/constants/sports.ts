@@ -17,6 +17,11 @@ export const SPORTS: Sport[] = [
   { label: 'Track & Field', value: 'Track & Field', icon: 'run-fast', color: '#1ABC9C' },
   { label: 'Baseball', value: 'Baseball', icon: 'baseball', color: '#3498DB' },
   { label: 'Volleyball', value: 'Volleyball', icon: 'volleyball', color: '#F1C40F' },
+  { label: 'Softball', value: 'Softball', icon: 'softball', color: '#E91E63' },
+  { label: 'Field Hockey', value: 'Field Hockey', icon: 'hockey-sticks', color: '#00BCD4' },
+  { label: 'Wrestling', value: 'Wrestling', icon: 'kabaddi', color: '#FF7043' },
+  { label: 'Swim', value: 'Swim', icon: 'swim', color: '#29B6F6' },
+  { label: 'Tennis', value: 'Tennis', icon: 'tennis', color: '#66BB6A' },
 ];
 
 // Avatar colors assigned deterministically by name

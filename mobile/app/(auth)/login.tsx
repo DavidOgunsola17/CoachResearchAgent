@@ -182,11 +182,12 @@ const styles = StyleSheet.create({
   },
   welcomeCard: {
     backgroundColor: Colors.cardBackground,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
+    borderRadius: 28,
+    marginHorizontal: 16,
+    marginBottom: 24,
     paddingHorizontal: 24,
     paddingTop: 32,
-    paddingBottom: 40,
+    paddingBottom: 32,
   },
   welcomeTitle: {
     fontSize: 28,
