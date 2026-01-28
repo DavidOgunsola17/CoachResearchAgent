@@ -35,7 +35,7 @@ export default function DrawerLayout() {
         name="settings"
         options={{
           title: 'Settings',
-          drawerItemStyle: { display: 'none' },
+          drawerItemStyle: { height: 0, overflow: 'hidden' },
         }}
       />
     </Drawer>
