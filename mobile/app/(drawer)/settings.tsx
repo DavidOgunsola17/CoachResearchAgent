@@ -1,9 +1,11 @@
 import { View, Text, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { useAuthStore } from '../../stores/authStore';
 import Colors from '../../constants/colors';
 
 export default function SettingsScreen() {
+  const router = useRouter();
   const { signOut, user } = useAuthStore();
 
   const handleSignOut = () => {
@@ -19,6 +21,19 @@ export default function SettingsScreen() {
 
   return (
     <View style={styles.container}>
+      {/* Header with Back Button */}
+      <View style={styles.header}>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          style={styles.backButton}
+        >
+          <Ionicons name="arrow-back" size={24} color={Colors.textPrimary} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Settings</Text>
+        <View style={{ width: 24 }} />
+      </View>
+
       {/* Profile Section */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Profile</Text>
@@ -56,7 +71,21 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.background,
     paddingHorizontal: 16,
-    paddingTop: 24,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: 56,
+    paddingBottom: 16,
+  },
+  backButton: {
+    padding: 4,
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: Colors.textPrimary,
   },
   section: {
     marginBottom: 32,
