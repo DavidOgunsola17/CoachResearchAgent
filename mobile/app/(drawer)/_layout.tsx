@@ -1,80 +1,41 @@
 import { Drawer } from 'expo-router/drawer';
-import { Ionicons } from '@expo/vector-icons';
 import Colors from '../../constants/colors';
+import CustomDrawerContent from '../../components/CustomDrawerContent';
 
 export default function DrawerLayout() {
   return (
     <Drawer
+      drawerContent={(props) => <CustomDrawerContent {...props} />}
       screenOptions={{
-        headerStyle: {
-          backgroundColor: Colors.background,
-        },
-        headerTintColor: Colors.textPrimary,
-        headerTitleStyle: {
-          fontWeight: '700',
-        },
+        headerShown: false,
         drawerStyle: {
           backgroundColor: Colors.cardBackground,
-          width: 280,
+          width: 300,
         },
-        drawerActiveTintColor: Colors.primary,
-        drawerInactiveTintColor: Colors.textSecondary,
-        drawerLabelStyle: {
-          fontSize: 16,
-          fontWeight: '600',
-          marginLeft: -8,
-        },
-        drawerItemStyle: {
-          borderRadius: 12,
-          paddingVertical: 2,
-          marginHorizontal: 8,
-        },
+        overlayColor: 'rgba(0, 0, 0, 0.6)',
         sceneStyle: {
           backgroundColor: Colors.background,
         },
+        drawerType: 'front',
       }}
     >
       <Drawer.Screen
         name="index"
-        options={{
-          title: 'SKOUT',
-          headerShown: false,
-          drawerLabel: 'SKOUT',
-          drawerIcon: ({ color, size }) => (
-            <Ionicons name="search" size={size} color={color} />
-          ),
-        }}
+        options={{ title: 'SKOUT' }}
       />
       <Drawer.Screen
         name="contacts"
-        options={{
-          title: 'Contacts',
-          headerShown: false,
-          drawerLabel: 'Contacts',
-          drawerIcon: ({ color, size }) => (
-            <Ionicons name="people" size={size} color={color} />
-          ),
-        }}
+        options={{ title: 'All Contacts' }}
       />
       <Drawer.Screen
         name="templates"
-        options={{
-          title: 'Templates',
-          headerShown: false,
-          drawerLabel: 'Templates',
-          drawerIcon: ({ color, size }) => (
-            <Ionicons name="document-text" size={size} color={color} />
-          ),
-        }}
+        options={{ title: 'Templates' }}
       />
       <Drawer.Screen
         name="settings"
         options={{
           title: 'Settings',
-          drawerLabel: 'Settings',
-          drawerIcon: ({ color, size }) => (
-            <Ionicons name="settings" size={size} color={color} />
-          ),
+          drawerItemStyle: { display: 'none' },
         }}
       />
     </Drawer>
