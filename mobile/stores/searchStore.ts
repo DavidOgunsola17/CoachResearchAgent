@@ -92,6 +92,7 @@ export const useSearchStore = create<SearchState>((set, get) => ({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ school_name: school, sport_name: sport }),
+        signal: AbortSignal.timeout(120000), // 2 minutes instead of default
       });
 
       cancelStages();
